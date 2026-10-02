@@ -1,1134 +1,257 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>WhatsApp Status Forwarder</title>
-
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
-
-    body {
-      background: #f4f7f9;
-      color: #17212b;
-      min-height: 100vh;
-    }
-
-    header {
-      background: #075e54;
-      color: white;
-      padding: 20px;
-      text-align: center;
-    }
-
-    header h1 {
-      font-size: 23px;
-      margin-bottom: 6px;
-    }
-
-    header p {
-      opacity: 0.85;
-      font-size: 14px;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 850px;
-      margin: 25px auto;
-      padding: 0 15px;
-    }
-
-    .card {
-      background: white;
-      border-radius: 14px;
-      padding: 20px;
-      margin-bottom: 18px;
-      box-shadow: 0 4px 18px rgba(0,0,0,0.07);
-    }
-
-    .card h2 {
-      font-size: 18px;
-      margin-bottom: 15px;
-    }
-
-    label {
-      display: block;
-      font-size: 14px;
-      font-weight: bold;
-      margin-bottom: 7px;
-    }
-
-    input {
-      width: 100%;
-      padding: 13px;
-      border: 1px solid #d5dce0;
-      border-radius: 9px;
-      outline: none;
-      font-size: 15px;
-      margin-bottom: 12px;
-    }
-
-    input:focus {
-      border-color: #075e54;
-    }
-
-    button {
-      border: none;
-      border-radius: 9px;
-      padding: 12px 17px;
-      cursor: pointer;
-      font-weight: bold;
-      font-size: 14px;
-    }
-
-    .primary {
-      background: #075e54;
-      color: white;
-      width: 100%;
-    }
-
-    .primary:hover {
-      background: #064e46;
-    }
-
-    .secondary {
-      background: #e9f5f3;
-      color: #075e54;
-    }
-
-    .danger {
-      background: #ffe7e7;
-      color: #c62828;
-    }
-
-    .account {
-      border: 1px solid #e1e6e8;
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 12px;
-    }
-
-    .account-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .phone {
-      font-weight: bold;
-    }
-
-    .status {
-      font-size: 12px;
-      padding: 6px 9px;
-      border-radius: 20px;
-      background: #eee;
-    }
-
-    .connected {
-      background: #d9f7e8;
-      color: #137a43;
-    }
-
-    .pairing {
-      background: #fff3cd;
-      color: #856404;
-    }
-
-    .disconnected {
-      background: #ffe1e1;
-      color: #b42318;
-    }
-
-    .pair-code {
-      background: #111;
-      color: #fff;
-      padding: 14px;
-      border-radius: 9px;
-      text-align: center;
-      font-size: 22px;
-      letter-spacing: 3px;
-      margin: 12px 0;
-      font-weight: bold;
-    }
-
-    .groups {
-      margin-top: 15px;
-      max-height: 300px;
-      overflow-y: auto;
-      border: 1px solid #e3e7e9;
-      border-radius: 9px;
-    }
-
-    .group {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px;
-      border-bottom: 1px solid #edf0f1;
-    }
-
-    .group:last-child {
-      border-bottom: none;
-    }
-
-    .group input {
-      width: auto;
-      margin: 0;
-    }
-
-    .group-name {
-      font-size: 14px;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
-
-    .toggle-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: #f6f8f9;
-      padding: 13px;
-      border-radius: 9px;
-      margin-top: 15px;
-    }
-
-    .toggle {
-      width: 48px;
-      height: 26px;
-      border-radius: 20px;
-      background: #bbb;
-      position: relative;
-      cursor: pointer;
-    }
-
-    .toggle::after {
-      content: "";
-      width: 20px;
-      height: 20px;
-      background: white;
-      border-radius: 50%;
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      transition: 0.2s;
-    }
-
-    .toggle.active {
-      background: #075e54;
-    }
-
-    .toggle.active::after {
-      left: 25px;
-    }
-
-    .message {
-      display: none;
-      padding: 12px;
-      border-radius: 9px;
-      margin-bottom: 15px;
-      font-size: 14px;
-    }
-
-    .message.show {
-      display: block;
-    }
-
-    .success {
-      background: #d9f7e8;
-      color: #137a43;
-    }
-
-    .error {
-      background: #ffe1e1;
-      color: #b42318;
-    }
-
-    .empty {
-      text-align: center;
-      padding: 25px;
-      color: #777;
-      font-size: 14px;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    @media (max-width: 600px) {
-      header h1 {
-        font-size: 20px;
-      }
-
-      .card {
-        padding: 16px;
-      }
-
-      .account-top {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WhatsApp Status Forwarder</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial;background:#f4f7f6;color:#17211b}
+header{background:linear-gradient(135deg,#075e54,#128c7e);color:white;padding:24px 18px}
+header h1{margin:0 0 6px;font-size:24px}
+header p{margin:0;font-size:14px}
+main{max-width:900px;margin:20px auto;padding:0 12px}
+.card{background:white;padding:18px;border-radius:14px;margin-bottom:18px;box-shadow:0 4px 18px #0001}
+h2{font-size:18px;margin-top:0}
+input[type=text]{width:100%;padding:13px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:15px}
+button{border:0;border-radius:8px;padding:11px 16px;background:#128c7e;color:white;font-weight:bold;margin:4px;cursor:pointer}
+.gray{background:#555}
+.message{padding:10px;margin-top:10px;border-radius:7px}
+.success{background:#e8f5e9;color:#2e7d32}
+.error{background:#ffebee;color:#c62828}
+.pair{display:none;text-align:center;background:#eefaf7;padding:18px;margin-top:15px;border-radius:9px}
+.code{font-size:28px;font-weight:bold;letter-spacing:4px;color:#075e54;margin:12px}
+.account{border:1px solid #ddd;border-radius:9px;padding:15px;margin:12px 0}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.status{font-size:13px;color:#777;margin-top:5px}
+.connected{color:#128c7e;font-weight:bold}
+.groups{display:none;border-top:1px solid #eee;margin-top:14px;padding-top:14px}
+.group{display:block;padding:9px 0;border-bottom:1px solid #eee}
+.empty{text-align:center;color:#777;padding:15px}
+</style>
 </head>
-
 <body>
 
 <header>
-  <h1>WhatsApp Status Forwarder</h1>
-  <p>Automatically forward your Status to selected groups</p>
+<h1>WhatsApp Status Forwarder</h1>
+<p>Forward your WhatsApp Status to selected groups.</p>
 </header>
 
-<div class="container">
+<main>
 
-  <div id="message" class="message"></div>
+<div class="card">
+<h2>Connect WhatsApp</h2>
 
-  <!-- CONNECT ACCOUNT -->
+<input id="phone" type="text"
+placeholder="2348012345678">
 
-  <div class="card">
+<button onclick="connect()">Connect WhatsApp</button>
 
-    <h2>Connect WhatsApp</h2>
+<div id="msg"></div>
 
-    <label for="phone">
-      WhatsApp phone number
-    </label>
-
-    <input
-      id="phone"
-      type="tel"
-      placeholder="2348012345678"
-      autocomplete="off"
-    >
-
-    <button
-      class="primary"
-      onclick="connectWhatsApp()"
-    >
-      Connect WhatsApp
-    </button>
-
-    <div
-      id="pairingArea"
-      class="hidden"
-    >
-
-      <p style="margin-top:15px;font-size:14px;">
-        Enter this pairing code in WhatsApp:
-      </p>
-
-      <div
-        id="pairingCode"
-        class="pair-code"
-      >
-        --------
-      </div>
-
-      <p style="font-size:13px;color:#777;">
-        WhatsApp → Linked Devices →
-        Link a device → Link with phone number instead
-      </p>
-
-    </div>
-
-  </div>
-
-
-  <!-- ACCOUNTS -->
-
-  <div class="card">
-
-    <h2>Connected Accounts</h2>
-
-    <div id="accounts">
-      <div class="empty">
-        Loading accounts...
-      </div>
-    </div>
-
-  </div>
-
+<div id="pair" class="pair">
+<div>Pairing Code</div>
+<div id="code" class="code">--------</div>
+<small>WhatsApp → Linked Devices → Link a Device → Link with phone number</small>
+</div>
 </div>
 
+<div class="card">
+<h2>Connected Accounts</h2>
+<div id="accounts">
+<div class="empty">Loading...</div>
+</div>
+</div>
+
+</main>
 
 <script>
-
-  /*
-    Change this later when we deploy the backend.
-
-    For now the backend is running locally
-    on Termux.
-  */
-
-  const API =
-    "http://localhost:3000";
-
-
-  let accounts = [];
-
-
-  // ==========================================================
-  // MESSAGE
-  // ==========================================================
-
-  function showMessage(
-    text,
-    type = "success"
-  ) {
-
-    const box =
-      document.getElementById("message");
-
-    box.textContent = text;
-
-    box.className =
-      `message show ${type}`;
-
-    setTimeout(() => {
-      box.classList.remove("show");
-    }, 5000);
-  }
-
-
-  // ==========================================================
-  // CONNECT WHATSAPP
-  // ==========================================================
-
-  async function connectWhatsApp() {
-
-    const phone =
-      document
-        .getElementById("phone")
-        .value
-        .trim();
-
-    if (!phone) {
-
-      showMessage(
-        "Enter your WhatsApp phone number.",
-        "error"
-      );
-
-      return;
-    }
-
-
-    try {
-
-      const response =
-        await fetch(
-          `${API}/api/accounts/connect`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-
-            body: JSON.stringify({
-              phone
-            })
-          }
-        );
-
-
-      const data =
-        await response.json();
-
-
-      if (!response.ok) {
-
-        throw new Error(
-          data.error ||
-          "Connection failed"
-        );
-      }
-
-
-      if (data.pairingCode) {
-
-        document
-          .getElementById(
-            "pairingArea"
-          )
-          .classList.remove(
-            "hidden"
-          );
-
-        document
-          .getElementById(
-            "pairingCode"
-          )
-          .textContent =
-            data.pairingCode;
-
-        showMessage(
-          "Pairing code generated.",
-          "success"
-        );
-
-      } else {
-
-        showMessage(
-          "WhatsApp connection started.",
-          "success"
-        );
-      }
-
-
-      loadAccounts();
-
-    } catch (error) {
-
-      showMessage(
-        error.message,
-        "error"
-      );
-    }
-  }
-
-
-  // ==========================================================
-  // LOAD ACCOUNTS
-  // ==========================================================
-
-  async function loadAccounts() {
-
-    try {
-
-      const response =
-        await fetch(
-          `${API}/api/accounts`
-        );
-
-      accounts =
-        await response.json();
-
-      renderAccounts();
-
-    } catch (error) {
-
-      document
-        .getElementById(
-          "accounts"
-        )
-        .innerHTML = `
-          <div class="empty">
-            Backend is not reachable.
-          </div>
-        `;
-    }
-  }
-
-
-  // ==========================================================
-  // RENDER ACCOUNTS
-  // ==========================================================
-
-  function renderAccounts() {
-
-    const container =
-      document.getElementById(
-        "accounts"
-      );
-
-
-    if (!accounts.length) {
-
-      container.innerHTML = `
-        <div class="empty">
-          No WhatsApp accounts connected yet.
-        </div>
-      `;
-
-      return;
-    }
-
-
-    container.innerHTML =
-      accounts
-        .map(account =>
-          renderAccount(account)
-        )
-        .join("");
-  }
-
-
-  // ==========================================================
-  // ACCOUNT CARD
-  // ==========================================================
-
-  function renderAccount(
-    account
-  ) {
-
-    const status =
-      account.liveStatus ||
-      account.status ||
-      "unknown";
-
-
-    let statusClass =
-      "status";
-
-    if (
-      status ===
-      "connected"
-    ) {
-      statusClass +=
-        " connected";
-    }
-
-    if (
-      status ===
-      "pairing"
-    ) {
-      statusClass +=
-        " pairing";
-    }
-
-    if (
-      status ===
-      "disconnected"
-    ) {
-      statusClass +=
-        " disconnected";
-    }
-
-
-    const enabled =
-      Boolean(
-        account.forwardingEnabled
-      );
-
-
-    const groups =
-      account.selectedGroups ||
-      [];
-
-
-    return `
-
-      <div
-        class="account"
-        id="account-${account.id}"
-      >
-
-        <div class="account-top">
-
-          <div>
-            <div class="phone">
-              +${escapeHtml(
-                account.phone ||
-                ""
-              )}
-            </div>
-
-            <small
-              style="color:#777;"
-            >
-              ${escapeHtml(
-                account.id
-              )}
-            </small>
-          </div>
-
-          <span
-            class="${statusClass}"
-          >
-            ${escapeHtml(status)}
-          </span>
-
-        </div>
-
-
-        ${
-          account.pairingCode
-            ? `
-              <div
-                class="pair-code"
-              >
-                ${escapeHtml(
-                  account.pairingCode
-                )}
-              </div>
-            `
-            : ""
-        }
-
-
-        <div class="toggle-row">
-
-          <div>
-            <strong>
-              Automatic forwarding
-            </strong>
-
-            <div
-              style="
-                font-size:12px;
-                color:#777;
-                margin-top:3px;
-              "
-            >
-              ${groups.length}
-              group(s) selected
-            </div>
-          </div>
-
-          <div
-            class="toggle ${
-              enabled
-                ? "active"
-                : ""
-            }"
-            onclick="
-              toggleForwarding(
-                '${account.id}',
-                ${!enabled}
-              )
-            "
-          ></div>
-
-        </div>
-
-
-        <div class="actions">
-
-          <button
-            class="secondary"
-            onclick="
-              loadGroups(
-                '${account.id}'
-              )
-            "
-          >
-            Load Groups
-          </button>
-
-          <button
-            class="secondary"
-            onclick="
-              refreshAccount(
-                '${account.id}'
-              )
-            "
-          >
-            Refresh
-          </button>
-
-        </div>
-
-
-        <div
-          id="groups-${account.id}"
-          class="groups hidden"
-        ></div>
-
-      </div>
-    `;
-  }
-
-
-  // ==========================================================
-  // LOAD GROUPS
-  // ==========================================================
-
-  async function loadGroups(
-    accountId
-  ) {
-
-    const box =
-      document.getElementById(
-        `groups-${accountId}`
-      );
-
-    box.classList.remove(
-      "hidden"
-    );
-
-    box.innerHTML = `
-      <div class="empty">
-        Loading WhatsApp groups...
-      </div>
-    `;
-
-
-    try {
-
-      const response =
-        await fetch(
-          `${API}/api/accounts/${accountId}/groups`
-        );
-
-
-      const data =
-        await response.json();
-
-
-      if (!response.ok) {
-
-        throw new Error(
-          data.error ||
-          "Could not load groups"
-        );
-      }
-
-
-      const account =
-        accounts.find(
-          a =>
-            a.id ===
-            accountId
-        );
-
-
-      const selected =
-        (account?.selectedGroups || [])
-          .map(group =>
-            typeof group === "string"
-              ? group
-              : group.id
-          );
-
-
-      if (!data.groups?.length) {
-
-        box.innerHTML = `
-          <div class="empty">
-            No groups found.
-          </div>
-        `;
-
-        return;
-      }
-
-
-      box.innerHTML = `
-
-        <div
-          style="
-            padding:12px;
-            border-bottom:1px solid #ddd;
-            font-size:13px;
-          "
-        >
-
-          <strong>
-            Select destination groups
-          </strong>
-
-          <div
-            style="
-              margin-top:4px;
-              color:#777;
-            "
-          >
-            Your Status will be forwarded
-            to every selected group.
-          </div>
-
-        </div>
-
-        ${data.groups.map(group => `
-
-          <label
-            class="group"
-          >
-
-            <input
-              type="checkbox"
-              value="${escapeHtml(
-                group.id
-              )}"
-              data-group-name="${escapeHtml(
-                group.name
-              )}"
-              ${
-                selected.includes(
-                  group.id
-                )
-                  ? "checked"
-                  : ""
-              }
-            >
-
-            <span
-              class="group-name"
-            >
-              ${escapeHtml(
-                group.name
-              )}
-            </span>
-
-          </label>
-
-        `).join("")}
-
-
-        <div
-          style="
-            padding:12px;
-          "
-        >
-
-          <button
-            class="primary"
-            onclick="
-              saveGroups(
-                '${accountId}'
-              )
-            "
-          >
-            Save Selected Groups
-          </button>
-
-        </div>
-      `;
-      
-    } catch (error) {
-
-      box.innerHTML = `
-        <div class="empty">
-          ${escapeHtml(
-            error.message
-          )}
-        </div>
-      `;
-    }
-  }
-
-
-  // ==========================================================
-  // SAVE GROUPS
-  // ==========================================================
-
-  async function saveGroups(
-    accountId
-  ) {
-
-    const box =
-      document.getElementById(
-        `groups-${accountId}`
-      );
-
-
-    const checkboxes =
-      box.querySelectorAll(
-        'input[type="checkbox"]'
-      );
-
-
-    const groups = [];
-
-
-    checkboxes.forEach(
-      checkbox => {
-
-        if (
-          checkbox.checked
-        ) {
-
-          groups.push({
-            id:
-              checkbox.value,
-
-            name:
-              checkbox.dataset.groupName
-          });
-        }
-      }
-    );
-
-
-    try {
-
-      const response =
-        await fetch(
-          `${API}/api/accounts/${accountId}/groups`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-
-            body: JSON.stringify({
-              groups
-            })
-          }
-        );
-
-
-      const data =
-        await response.json();
-
-
-      if (!response.ok) {
-
-        throw new Error(
-          data.error ||
-          "Could not save groups"
-        );
-      }
-
-
-      showMessage(
-        `${groups.length} group(s) selected.`,
-        "success"
-      );
-
-
-      loadAccounts();
-
-    } catch (error) {
-
-      showMessage(
-        error.message,
-        "error"
-      );
-    }
-  }
-
-
-  // ==========================================================
-  // FORWARDING TOGGLE
-  // ==========================================================
-
-  async function toggleForwarding(
-    accountId,
-    enabled
-  ) {
-
-    try {
-
-      const response =
-        await fetch(
-          `${API}/api/accounts/${accountId}/forwarding`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-
-            body: JSON.stringify({
-              enabled
-            })
-          }
-        );
-
-
-      const data =
-        await response.json();
-
-
-      if (!response.ok) {
-
-        throw new Error(
-          data.error ||
-          "Could not update forwarding"
-        );
-      }
-
-
-      showMessage(
-        enabled
-          ? "Automatic forwarding enabled."
-          : "Automatic forwarding disabled.",
-        "success"
-      );
-
-
-      loadAccounts();
-
-    } catch (error) {
-
-      showMessage(
-        error.message,
-        "error"
-      );
-    }
-  }
-
-
-  // ==========================================================
-  // REFRESH ACCOUNT
-  // ==========================================================
-
-  async function refreshAccount(
-    accountId
-  ) {
-
-    await loadAccounts();
-
-    showMessage(
-      "Account status refreshed.",
-      "success"
-    );
-  }
-
-
-  // ==========================================================
-  // HTML ESCAPE
-  // ==========================================================
-
-  function escapeHtml(
-    value
-  ) {
-
-    return String(
-      value ?? ""
-    )
-      .replace(
-        /&/g,
-        "&amp;"
-      )
-      .replace(
-        /</g,
-        "&lt;"
-      )
-      .replace(
-        />/g,
-        "&gt;"
-      )
-      .replace(
-        /"/g,
-        "&quot;"
-      )
-      .replace(
-        /'/g,
-        "&#039;"
-      );
-  }
-
-
-  // ==========================================================
-  // AUTO REFRESH
-  // ==========================================================
-
-  loadAccounts();
-
-  setInterval(
-    loadAccounts,
-    5000
-  );
-
+const API="https://whatsapp-status-web.onrender.com";
+
+function message(t,c){
+const m=document.getElementById("msg");
+m.className="message "+c;
+m.textContent=t;
+}
+
+async function connect(){
+const phone=document.getElementById("phone").value.trim();
+
+if(!phone){
+message("Enter your WhatsApp number.","error");
+return;
+}
+
+try{
+message("Connecting...","success");
+document.getElementById("pair").style.display="none";
+
+const r=await fetch(API+"/api/accounts/connect",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({phone})
+});
+
+const d=await r.json();
+
+if(!r.ok)throw Error(d.error||"Connection failed");
+
+if(d.pairingCode){
+document.getElementById("code").textContent=d.pairingCode;
+document.getElementById("pair").style.display="block";
+message("Pairing code generated.","success");
+}
+
+loadAccounts();
+
+}catch(e){
+message(e.message,"error");
+}
+}
+
+async function loadAccounts(){
+
+try{
+const r=await fetch(API+"/api/accounts");
+const d=await r.json();
+const a=d.accounts||[];
+const box=document.getElementById("accounts");
+
+if(!a.length){
+box.innerHTML='<div class="empty">No WhatsApp accounts connected yet.</div>';
+return;
+}
+
+box.innerHTML=a.map(x=>`
+<div class="account">
+
+<div class="top">
+<div>
+<b>${esc(x.phone||"Unknown")}</b>
+<div class="status ${x.connected?"connected":""}">
+${x.connected?"● Connected":"○ Disconnected"}
+</div>
+</div>
+
+<label>
+<input type="checkbox"
+${x.forwardingEnabled?"checked":""}
+onchange="forward('${x.id}',this.checked)">
+Forwarding
+</label>
+</div>
+
+<button onclick="groups('${x.id}')">Load Groups</button>
+<button class="gray" onclick="loadAccounts()">Refresh</button>
+
+<div id="g-${x.id}" class="groups"></div>
+
+</div>
+`).join("");
+
+}catch(e){
+document.getElementById("accounts").innerHTML=
+'<div class="empty">Backend unavailable.</div>';
+}
+}
+
+async function groups(id){
+
+const box=document.getElementById("g-"+id);
+box.style.display="block";
+box.innerHTML="Loading groups...";
+
+try{
+const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/groups");
+const d=await r.json();
+
+if(!r.ok)throw Error(d.error||"Unable to load groups");
+
+const gs=d.groups||[];
+
+if(!gs.length){
+box.innerHTML="No groups found.";
+return;
+}
+
+box.innerHTML=
+"<b>Select groups</b>"+
+gs.map(g=>`
+<label class="group">
+<input type="checkbox"
+class="cg-${id}"
+value="${esc(g.id)}"
+${g.selected?"checked":""}>
+${esc(g.subject||g.name||g.id)}
+</label>
+`).join("")+
+`<button onclick="saveGroups('${id}')">Save Selected Groups</button>`;
+
+}catch(e){
+box.innerHTML=e.message;
+}
+}
+
+async function saveGroups(id){
+
+const boxes=document.querySelectorAll(".cg-"+id);
+const selected=[];
+
+boxes.forEach(b=>{
+if(b.checked)selected.push(b.value);
+});
+
+try{
+const r=await fetch(
+API+"/api/accounts/"+encodeURIComponent(id)+"/groups",
+{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({groups:selected})
+});
+
+const d=await r.json();
+
+if(!r.ok)throw Error(d.error||"Save failed");
+
+alert("Groups saved successfully.");
+}catch(e){
+alert(e.message);
+}
+}
+
+async function forward(id,enabled){
+
+try{
+const r=await fetch(
+API+"/api/accounts/"+encodeURIComponent(id)+"/forwarding",
+{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({enabled})
+});
+
+const d=await r.json();
+
+if(!r.ok)throw Error(d.error||"Update failed");
+
+}catch(e){
+alert(e.message);
+loadAccounts();
+}
+}
+
+function esc(v){
+return String(v??"")
+.replaceAll("&","&amp;")
+.replaceAll("<","&lt;")
+.replaceAll(">","&gt;")
+.replaceAll('"',"&quot;")
+.replaceAll("'","&#039;");
+}
+
+loadAccounts();
+setInterval(loadAccounts,5000);
 </script>
 
 </body>
