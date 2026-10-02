@@ -280,7 +280,18 @@ function isOwnStatus(message, sock) {
   const remoteJid =
     normalizeJid(message?.key?.remoteJid);
 
-  if (remoteJid !== "status@broadcast") {
+  const remoteJidAlt =
+    normalizeJid(
+      message?.key?.remoteJidAlt
+    );
+
+  const isStatus =
+    remoteJid === "status@broadcast" ||
+    remoteJid?.endsWith("@broadcast") ||
+    remoteJidAlt === "status@broadcast" ||
+    remoteJidAlt?.endsWith("@broadcast");
+
+  if (!isStatus) {
     return false;
   }
 
@@ -736,12 +747,24 @@ async function connectWhatsApp(
               message.key?.remoteJid
             );
 
-          if (
-            remoteJid !==
-            "status@broadcast"
-          ) {
+          const remoteJidAlt =
+            normalizeJid(
+              message.key?.remoteJidAlt
+            );
+
+          const isStatusEvent =
+            remoteJid === "status@broadcast" ||
+            remoteJid?.endsWith("@broadcast") ||
+            remoteJidAlt === "status@broadcast" ||
+            remoteJidAlt?.endsWith("@broadcast");
+
+          if (!isStatusEvent) {
             continue;
           }
+
+          console.log(
+            `📡 Possible Status event for ${account.phone}`
+          );
 
           console.log(
             `📡 Status event received for ${account.phone}`
