@@ -1,12 +1,14 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import pino from "pino";
 import fs from "fs";
 import path from "path";
+import { MongoClient } from "mongodb";
+import { useMongoAuthState } from "./mongo-auth.js";
 
 import {
   makeWASocket,
-  useMultiFileAuthState,
   Browsers,
   DisconnectReason,
   downloadMediaMessage,
@@ -23,6 +25,24 @@ app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
 const PORT = process.env.PORT || 3000;
+
+const mongoClient = new MongoClient(process.env.MONGODB_URI);
+let mongoDb = null;
+
+async function initializeMongoDB() {
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is missing from .env");
+  }
+
+  await mongoClient.connect();
+
+  mongoDb = mongoClient.db(
+    process.env.MONGODB_DB || "whatsapp_status_web"
+  );
+
+  console.log("✅ MongoDB connected successfully");
+  console.log(`📦 Database: ${mongoDb.databaseName}`);
+}
 
 const ROOT = process.cwd();
 const DATA_DIR = path.join(ROOT, "data");
@@ -42,21 +62,115 @@ const connections = new Map();
 const pairingWaiters = new Map();
 const reconnecting = new Set();
 
+let accountsCache = [];
+
 function readAccounts() {
-  try {
-    return JSON.parse(
-      fs.readFileSync(ACCOUNTS_FILE, "utf8")
-    );
-  } catch {
-    return [];
-  }
+  return accountsCache;
 }
 
 function saveAccounts(accounts) {
+  accountsCache = accounts;
+
+  if (!mongoDb) {
+    console.error("❌ MongoDB is not initialized");
+    return;
+  }
+
+  mongoDb.collection("accounts").updateOne(
+    { _id: "accounts" },
+    {
+      $set: {
+        accounts,
+        updatedAt: new Date()
+      }
+    },
+    { upsert: true }
+  ).catch(error => {
+    console.error(
+      "❌ Failed saving accounts to MongoDB:",
+      error?.message || error
+    );
+  });
+
+  // Keep the local file as a temporary fallback/migration copy.
   fs.writeFileSync(
     ACCOUNTS_FILE,
     JSON.stringify(accounts, null, 2)
   );
+}
+
+async function initializeAccounts() {
+  if (!mongoDb) {
+    throw new Error("MongoDB is not initialized");
+  }
+
+  const collection = mongoDb.collection("accounts");
+
+  const stored = await collection.findOne({
+    _id: "accounts"
+  });
+
+  if (stored && Array.isArray(stored.accounts)) {
+    accountsCache = stored.accounts;
+
+    fs.writeFileSync(
+      ACCOUNTS_FILE,
+      JSON.stringify(accountsCache, null, 2)
+    );
+
+    console.log(
+      `📦 Loaded ${accountsCache.length} accounts from MongoDB`
+    );
+
+    return;
+  }
+
+  // First run: migrate any existing local accounts.json.
+  let localAccounts = [];
+
+  try {
+    localAccounts = JSON.parse(
+      fs.readFileSync(ACCOUNTS_FILE, "utf8")
+    );
+
+    if (!Array.isArray(localAccounts)) {
+      localAccounts = [];
+    }
+  } catch {
+    localAccounts = [];
+  }
+
+  accountsCache = localAccounts;
+
+  if (accountsCache.length > 0) {
+    await collection.updateOne(
+      { _id: "accounts" },
+      {
+        $set: {
+          accounts: accountsCache,
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    console.log(
+      `📤 Migrated ${accountsCache.length} local accounts to MongoDB`
+    );
+  } else {
+    await collection.updateOne(
+      { _id: "accounts" },
+      {
+        $set: {
+          accounts: [],
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    console.log("📦 No existing accounts to migrate");
+  }
 }
 
 function normalizePhone(phone) {
@@ -393,22 +507,16 @@ async function connectWhatsApp(
     }
   }
 
-  const sessionPath =
-    path.join(
-      SESSIONS_DIR,
-      account.id
-    );
-
-  fs.mkdirSync(
-    sessionPath,
-    { recursive: true }
-  );
+  if (!mongoDb) {
+    throw new Error("MongoDB is not initialized");
+  }
 
   const {
     state,
     saveCreds
-  } = await useMultiFileAuthState(
-    sessionPath
+  } = await useMongoAuthState(
+    mongoDb,
+    account.id
   );
 
   const entry = {
@@ -561,6 +669,17 @@ async function connectWhatsApp(
 
         console.log(
           `⚠️ WhatsApp disconnected: ${account.id}`
+        );
+
+        console.log(
+          `❗ Disconnect status code: ${statusCode ?? "unknown"}`
+        );
+
+        console.log(
+          "❗ Disconnect error:",
+          lastDisconnect?.error?.message ||
+          lastDisconnect?.error ||
+          "unknown"
         );
 
         console.log(
@@ -1170,50 +1289,63 @@ app.post(
 |--------------------------------------------------------------------------
 */
 
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log("");
-    console.log(
-      "======================================"
-    );
+async function startServer() {
+  try {
+    await initializeMongoDB();
+    await initializeAccounts();
 
-    console.log(
-      "🚀 WhatsApp Status Web Backend"
-    );
-
-    console.log(
-      `🌐 Port: ${PORT}`
-    );
-
-    console.log(
-      "======================================"
-    );
-
-    console.log("");
-
-    const accounts =
-      readAccounts();
-
-    console.log(
-      `📱 Saved accounts: ${accounts.length}`
-    );
-
-    /*
-     * Restore saved WhatsApp sessions.
-     */
-    for (const account of accounts) {
-      connectWhatsApp(
-        account,
-        null
-      ).catch(error => {
-        console.error(
-          `❌ Failed restoring ${account.phone}:`,
-          error?.message ||
-            error
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log("");
+        console.log(
+          "======================================"
         );
-      });
-    }
+        console.log(
+          "🚀 WhatsApp Status Web Backend"
+        );
+        console.log(
+          `🌐 Port: ${PORT}`
+        );
+        console.log(
+          "======================================"
+        );
+        console.log("");
+
+        const accounts =
+          readAccounts();
+
+        console.log(
+          `📱 Saved accounts: ${accounts.length}`
+        );
+
+        /*
+         * Restore saved WhatsApp sessions.
+         */
+        for (const account of accounts) {
+          connectWhatsApp(
+            account,
+            null
+          ).catch(error => {
+            console.error(
+              `❌ Failed restoring ${account.phone}:`,
+              error?.message ||
+              error
+            );
+          });
+        }
+      }
+    );
+  } catch (error) {
+    console.error(
+      "❌ Startup initialization failed:",
+      error?.message ||
+      error
+    );
+
+    process.exit(1);
   }
-);
+}
+
+startServer();

@@ -1,18 +1,1 @@
-[
-  {
-    "id": "account_1790961292230",
-    "phone": "2349152869756",
-    "createdAt": "2026-10-02T17:14:52.230Z",
-    "forwardingEnabled": true,
-    "selectedGroups": [],
-    "connected": false
-  },
-  {
-    "id": "account_1790961602439",
-    "phone": "2349137274485",
-    "createdAt": "2026-10-02T17:20:02.439Z",
-    "forwardingEnabled": true,
-    "selectedGroups": [],
-    "connected": false
-  }
-]
+[]
