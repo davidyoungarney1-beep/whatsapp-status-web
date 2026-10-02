@@ -1152,7 +1152,11 @@ app.get(
 
           participants:
             group.participants
-              ?.length || 0
+              ?.length || 0,
+
+          selected:
+            (account.selectedGroups || [])
+              .includes(group.id)
         }));
 
       list.sort(
