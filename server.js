@@ -381,6 +381,11 @@ async function forwardStatus(
     `📲 Own Status detected from ${account.phone} (${type})`
   );
 
+  console.log(
+    `📤 Selected groups (${selectedGroups.length}):`,
+    selectedGroups
+  );
+
   const text = getText(message);
 
   for (const groupId of selectedGroups) {
