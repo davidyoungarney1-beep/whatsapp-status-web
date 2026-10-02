@@ -4,32 +4,155 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WhatsApp Status Forwarder</title>
+
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial;background:#f4f7f6;color:#17211b}
-header{background:linear-gradient(135deg,#075e54,#128c7e);color:white;padding:24px 18px}
-header h1{margin:0 0 6px;font-size:24px}
-header p{margin:0;font-size:14px}
-main{max-width:900px;margin:20px auto;padding:0 12px}
-.card{background:white;padding:18px;border-radius:14px;margin-bottom:18px;box-shadow:0 4px 18px #0001}
-h2{font-size:18px;margin-top:0}
-input[type=text]{width:100%;padding:13px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:15px}
-button{border:0;border-radius:8px;padding:11px 16px;background:#128c7e;color:white;font-weight:bold;margin:4px;cursor:pointer}
-.gray{background:#555}
-.message{padding:10px;margin-top:10px;border-radius:7px}
-.success{background:#e8f5e9;color:#2e7d32}
-.error{background:#ffebee;color:#c62828}
-.pair{display:none;text-align:center;background:#eefaf7;padding:18px;margin-top:15px;border-radius:9px}
-.code{font-size:28px;font-weight:bold;letter-spacing:4px;color:#075e54;margin:12px}
-.account{border:1px solid #ddd;border-radius:9px;padding:15px;margin:12px 0}
-.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.status{font-size:13px;color:#777;margin-top:5px}
-.connected{color:#128c7e;font-weight:bold}
-.groups{display:none;border-top:1px solid #eee;margin-top:14px;padding-top:14px}
-.group{display:block;padding:9px 0;border-bottom:1px solid #eee}
-.empty{text-align:center;color:#777;padding:15px}
+
+body{
+margin:0;
+font-family:Arial;
+background:#f4f7f6;
+color:#17211b
+}
+
+header{
+background:linear-gradient(135deg,#075e54,#128c7e);
+color:white;
+padding:24px 18px
+}
+
+header h1{
+margin:0 0 6px;
+font-size:24px
+}
+
+header p{
+margin:0;
+font-size:14px
+}
+
+main{
+max-width:900px;
+margin:20px auto;
+padding:0 12px
+}
+
+.card{
+background:white;
+padding:18px;
+border-radius:14px;
+margin-bottom:18px;
+box-shadow:0 4px 18px #0001
+}
+
+h2{
+font-size:18px;
+margin-top:0
+}
+
+input[type=text]{
+width:100%;
+padding:13px;
+border:1px solid #ddd;
+border-radius:8px;
+margin-bottom:10px;
+font-size:15px
+}
+
+button{
+border:0;
+border-radius:8px;
+padding:11px 16px;
+background:#128c7e;
+color:white;
+font-weight:bold;
+margin:4px;
+cursor:pointer
+}
+
+.gray{
+background:#555
+}
+
+.message{
+padding:10px;
+margin-top:10px;
+border-radius:7px
+}
+
+.success{
+background:#e8f5e9;
+color:#2e7d32
+}
+
+.error{
+background:#ffebee;
+color:#c62828
+}
+
+.pair{
+display:none;
+text-align:center;
+background:#eefaf7;
+padding:18px;
+margin-top:15px;
+border-radius:9px
+}
+
+.code{
+font-size:28px;
+font-weight:bold;
+letter-spacing:4px;
+color:#075e54;
+margin:12px
+}
+
+.account{
+border:1px solid #ddd;
+border-radius:9px;
+padding:15px;
+margin:12px 0
+}
+
+.top{
+display:flex;
+justify-content:space-between;
+gap:10px;
+flex-wrap:wrap
+}
+
+.status{
+font-size:13px;
+color:#777;
+margin-top:5px
+}
+
+.connected{
+color:#128c7e;
+font-weight:bold
+}
+
+.groups{
+display:none;
+border-top:1px solid #eee;
+margin-top:14px;
+padding-top:14px
+}
+
+.group{
+display:block;
+padding:9px 0;
+border-bottom:1px solid #eee
+}
+
+.empty{
+text-align:center;
+color:#777;
+padding:15px
+}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -40,218 +163,563 @@ button{border:0;border-radius:8px;padding:11px 16px;background:#128c7e;color:whi
 <main>
 
 <div class="card">
+
 <h2>Connect WhatsApp</h2>
 
-<input id="phone" type="text"
-placeholder="2348012345678">
+<input
+id="phone"
+type="text"
+placeholder="2348012345678"
+>
 
-<button onclick="connect()">Connect WhatsApp</button>
+<button onclick="connect()">
+Connect WhatsApp
+</button>
 
 <div id="msg"></div>
 
 <div id="pair" class="pair">
+
 <div>Pairing Code</div>
-<div id="code" class="code">--------</div>
-<small>WhatsApp → Linked Devices → Link a Device → Link with phone number</small>
+
+<div id="code" class="code">
+--------
+</div>
+
+<small>
+WhatsApp → Linked Devices → Link a Device → Link with phone number
+</small>
+
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h2>Connected Accounts</h2>
+
+<div id="accounts">
+<div class="empty">
+Loading...
 </div>
 </div>
 
-<div class="card">
-<h2>Connected Accounts</h2>
-<div id="accounts">
-<div class="empty">Loading...</div>
-</div>
 </div>
 
 </main>
 
+
 <script>
+
 const API="https://whatsapp-status-web.onrender.com";
 
+
 function message(t,c){
+
 const m=document.getElementById("msg");
+
 m.className="message "+c;
+
 m.textContent=t;
+
 }
 
+
 async function connect(){
-const phone=document.getElementById("phone").value.trim();
+
+const phone=document
+.getElementById("phone")
+.value
+.trim();
 
 if(!phone){
-message("Enter your WhatsApp number.","error");
+
+message(
+"Enter your WhatsApp number.",
+"error"
+);
+
 return;
+
 }
 
 try{
-message("Connecting...","success");
-document.getElementById("pair").style.display="none";
 
-const r=await fetch(API+"/api/accounts/connect",{
+message(
+"Connecting...",
+"success"
+);
+
+document
+.getElementById("pair")
+.style.display="none";
+
+
+const r=await fetch(
+API+"/api/accounts/connect",
+{
 method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({phone})
-});
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+phone
+})
+}
+);
+
 
 const d=await r.json();
 
-if(!r.ok)throw Error(d.error||"Connection failed");
+
+if(!r.ok){
+
+throw Error(
+d.error||"Connection failed"
+);
+
+}
+
 
 if(d.pairingCode){
-document.getElementById("code").textContent=d.pairingCode;
-document.getElementById("pair").style.display="block";
-message("Pairing code generated.","success");
+
+document
+.getElementById("code")
+.textContent=d.pairingCode;
+
+document
+.getElementById("pair")
+.style.display="block";
+
+message(
+"Pairing code generated.",
+"success"
+);
+
 }
+
 
 loadAccounts();
 
 }catch(e){
-message(e.message,"error");
+
+message(
+e.message,
+"error"
+);
+
 }
+
 }
+
+
 
 async function loadAccounts(){
 
 try{
-const r=await fetch(API+"/api/accounts");
+
+const r=await fetch(
+API+"/api/accounts"
+);
+
 const d=await r.json();
+
 const a=d.accounts||[];
-const box=document.getElementById("accounts");
+
+const box=
+document.getElementById("accounts");
+
 
 if(!a.length){
-box.innerHTML='<div class="empty">No WhatsApp accounts connected yet.</div>';
+
+box.innerHTML=
+'<div class="empty">No WhatsApp accounts connected yet.</div>';
+
 return;
+
 }
 
+
+/*
+Preserve any group sections that
+are already open.
+*/
+
+const oldGroups={};
+
+a.forEach(x=>{
+
+const old=
+document.getElementById("g-"+x.id);
+
+if(old){
+
+oldGroups[x.id]={
+html:old.innerHTML,
+display:old.style.display
+};
+
+}
+
+});
+
+
 box.innerHTML=a.map(x=>`
+
 <div class="account">
 
 <div class="top">
+
 <div>
-<b>${esc(x.phone||"Unknown")}</b>
+
+<b>
+${esc(x.phone||"Unknown")}
+</b>
+
 <div class="status ${x.connected?"connected":""}">
-${x.connected?"● Connected":"○ Disconnected"}
+
+${x.connected
+?"● Connected"
+:"○ Disconnected"}
+
 </div>
+
 </div>
+
 
 <label>
-<input type="checkbox"
+
+<input
+type="checkbox"
 ${x.forwardingEnabled?"checked":""}
-onchange="forward('${x.id}',this.checked)">
+onchange="forward('${x.id}',this.checked)"
+>
+
 Forwarding
+
 </label>
-</div>
-
-<button onclick="groups('${x.id}')">Load Groups</button>
-<button class="gray" onclick="loadAccounts()">Refresh</button>
-
-<div id="g-${x.id}" class="groups"></div>
 
 </div>
+
+
+<button onclick="groups('${x.id}')">
+Load Groups
+</button>
+
+
+<button
+class="gray"
+onclick="loadAccounts()"
+>
+Refresh
+</button>
+
+
+<div
+id="g-${x.id}"
+class="groups"
+></div>
+
+
+</div>
+
 `).join("");
 
+
+/*
+Restore previously loaded groups
+after refreshing account data.
+*/
+
+Object.keys(oldGroups).forEach(id=>{
+
+const box=
+document.getElementById("g-"+id);
+
+if(!box)return;
+
+box.innerHTML=
+oldGroups[id].html;
+
+box.style.display=
+oldGroups[id].display;
+
+});
+
 }catch(e){
+
 document.getElementById("accounts").innerHTML=
 '<div class="empty">Backend unavailable.</div>';
+
 }
+
 }
+
+
 
 async function groups(id){
 
-const box=document.getElementById("g-"+id);
+const box=
+document.getElementById("g-"+id);
+
 box.style.display="block";
-box.innerHTML="Loading groups...";
+
+box.innerHTML=
+"Loading groups...";
+
 
 try{
-const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/groups");
+
+const r=await fetch(
+API+"/api/accounts/"
++encodeURIComponent(id)
++"/groups"
+);
+
+
 const d=await r.json();
 
-if(!r.ok)throw Error(d.error||"Unable to load groups");
+
+if(!r.ok){
+
+throw Error(
+d.error||"Unable to load groups"
+);
+
+}
+
 
 const gs=d.groups||[];
 
+
 if(!gs.length){
-box.innerHTML="No groups found.";
-return;
-}
 
 box.innerHTML=
+"No groups found.";
+
+return;
+
+}
+
+
+box.innerHTML=
+
 "<b>Select groups</b>"+
+
 gs.map(g=>`
+
 <label class="group">
-<input type="checkbox"
+
+<input
+type="checkbox"
 class="cg-${id}"
 value="${esc(g.id)}"
-${g.selected?"checked":""}>
-${esc(g.subject||g.name||g.id)}
+${g.selected?"checked":""}
+>
+
+${esc(
+g.subject||
+g.name||
+g.id
+)}
+
 </label>
+
 `).join("")+
-`<button onclick="saveGroups('${id}')">Save Selected Groups</button>`;
+
+`
+
+<button
+onclick="saveGroups('${id}')"
+>
+Save Selected Groups
+</button>
+
+`;
 
 }catch(e){
-box.innerHTML=e.message;
+
+box.innerHTML=
+e.message;
+
 }
+
 }
+
+
 
 async function saveGroups(id){
 
-const boxes=document.querySelectorAll(".cg-"+id);
+const boxes=
+document.querySelectorAll(
+".cg-"+id
+);
+
 const selected=[];
 
+
 boxes.forEach(b=>{
-if(b.checked)selected.push(b.value);
+
+if(b.checked){
+
+selected.push(
+b.value
+);
+
+}
+
 });
 
+
 try{
+
 const r=await fetch(
-API+"/api/accounts/"+encodeURIComponent(id)+"/groups",
+
+API+"/api/accounts/"
++encodeURIComponent(id)
++"/groups",
+
 {
 method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({groups:selected})
-});
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+groups:selected
+})
+
+}
+
+);
+
 
 const d=await r.json();
 
-if(!r.ok)throw Error(d.error||"Save failed");
 
-alert("Groups saved successfully.");
+if(!r.ok){
+
+throw Error(
+d.error||"Save failed"
+);
+
+}
+
+
+alert(
+"Groups saved successfully."
+);
+
 }catch(e){
-alert(e.message);
+
+alert(
+e.message
+);
+
 }
+
 }
+
+
 
 async function forward(id,enabled){
 
 try{
+
 const r=await fetch(
-API+"/api/accounts/"+encodeURIComponent(id)+"/forwarding",
+
+API+"/api/accounts/"
++encodeURIComponent(id)
++"/forwarding",
+
 {
 method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({enabled})
-});
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+enabled
+})
+
+}
+
+);
+
 
 const d=await r.json();
 
-if(!r.ok)throw Error(d.error||"Update failed");
+
+if(!r.ok){
+
+throw Error(
+d.error||"Update failed"
+);
+
+}
 
 }catch(e){
-alert(e.message);
+
+alert(
+e.message
+);
+
 loadAccounts();
+
 }
+
 }
+
+
 
 function esc(v){
+
 return String(v??"")
-.replaceAll("&","&amp;")
-.replaceAll("<","&lt;")
-.replaceAll(">","&gt;")
-.replaceAll('"',"&quot;")
-.replaceAll("'","&#039;");
+
+.replaceAll(
+"&",
+"&amp;"
+)
+
+.replaceAll(
+"<",
+"&lt;"
+)
+
+.replaceAll(
+">",
+"&gt;"
+)
+
+.replaceAll(
+'"',
+"&quot;"
+)
+
+.replaceAll(
+"'",
+"&#039;"
+);
+
 }
 
+
+/*
+Initial account loading.
+
+IMPORTANT:
+There is intentionally NO
+setInterval(loadAccounts,5000).
+
+That was causing the group
+list to disappear every 5 seconds.
+*/
+
 loadAccounts();
-setInterval(loadAccounts,5000);
+
 </script>
 
 </body>
