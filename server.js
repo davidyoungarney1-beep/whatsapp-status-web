@@ -325,7 +325,14 @@ function accountPublic(account) {
     connected:
       !!conn?.connected,
     pairingCode:
-      conn?.pairingCode || null
+      conn?.pairingCode || null,
+    forwardingStatus:
+      conn?.forwardingStatus || {
+        state: "idle",
+        current: 0,
+        total: 0,
+        message: "Waiting"
+      }
   };
 }
 
@@ -386,10 +393,43 @@ async function forwardStatus(
     selectedGroups
   );
 
+  const entry = connections.get(account.id);
+
+  if (entry?.forwardingStatus?.state === "forwarding") {
+    console.log(
+      `⏳ Forwarding already in progress for ${account.phone}`
+    );
+    return;
+  }
+
+  if (entry) {
+    entry.forwardingStatus = {
+      state: "forwarding",
+      current: 0,
+      total: selectedGroups.length,
+      message: `Forwarding 0/${selectedGroups.length}`
+    };
+  }
+
   const text = getText(message);
 
-  for (const groupId of selectedGroups) {
+  let successCount = 0;
+  let failureCount = 0;
+
+  for (let i = 0; i < selectedGroups.length; i++) {
+    const groupId = selectedGroups[i];
+
     console.log(`🎯 ATTEMPTING GROUP: ${groupId}`);
+
+    if (entry) {
+      entry.forwardingStatus = {
+        state: "forwarding",
+        current: i + 1,
+        total: selectedGroups.length,
+        message: `Forwarding ${i + 1}/${selectedGroups.length}`
+      };
+    }
+
     try {
       if (type === "text") {
         await sendGroupStatusText(
@@ -499,11 +539,14 @@ async function forwardStatus(
         );
       }
 
+      successCount++;
+
       console.log(
         `✅ Status forwarded to ${groupId}`
       );
 
     } catch (error) {
+      failureCount++;
       console.error(
         `❌ Failed forwarding to ${groupId}:`,
         error?.message || error
@@ -511,6 +554,26 @@ async function forwardStatus(
     }
   }
 }
+  if (entry) {
+    let finalState = "failed";
+    let finalMessage = `Failed 0/${selectedGroups.length} groups`;
+
+    if (successCount === selectedGroups.length) {
+      finalState = "forwarded";
+      finalMessage = `Forwarded ${successCount}/${selectedGroups.length} groups`;
+    } else if (successCount > 0) {
+      finalState = "partial";
+      finalMessage = `Forwarded ${successCount}/${selectedGroups.length} groups`;
+    }
+
+    entry.forwardingStatus = {
+      state: finalState,
+      current: successCount,
+      total: selectedGroups.length,
+      message: finalMessage
+    };
+  }
+
 async function connectWhatsApp(
   account,
   phoneForPairing = null
@@ -540,7 +603,13 @@ async function connectWhatsApp(
     sock: null,
     connected: false,
     pairingCode: null,
-    pairingRequested: false
+    pairingRequested: false,
+    forwardingStatus: {
+      state: "idle",
+      current: 0,
+      total: 0,
+      message: "Waiting"
+    }
   };
 
   connections.set(
