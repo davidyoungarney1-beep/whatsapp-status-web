@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { MongoClient } from "mongodb";
 import { useMongoAuthState } from "./mongo-auth.js";
+import { getUrlInfo } from "@kaels/casileys/lib/Utils/link-preview.js";
 
 import {
   makeWASocket,
@@ -355,6 +356,64 @@ function updateAccount(id, changes) {
   return accounts[index];
 }
 
+async function sendTextStatusWithPreview(sock, jid, text) {
+  const urlInfo = await getUrlInfo(text, {
+    thumbnailWidth: 192,
+    fetchOpts: { timeout: 3000 },
+    logger,
+    uploadImage: sock.waUploadToServer
+  });
+
+  const extendedTextMessage = { text };
+
+  if (urlInfo) {
+    extendedTextMessage.matchedText =
+      urlInfo["matched-text"];
+    extendedTextMessage.jpegThumbnail =
+      urlInfo.jpegThumbnail;
+    extendedTextMessage.description =
+      urlInfo.description;
+    extendedTextMessage.title =
+      urlInfo.title;
+    extendedTextMessage.previewType =
+      urlInfo.previewType ?? 0;
+    extendedTextMessage.linkPreviewMetadata =
+      urlInfo.linkPreviewMetadata;
+
+    const img = urlInfo.highQualityThumbnail;
+
+    if (img) {
+      extendedTextMessage.thumbnailDirectPath =
+        img.directPath;
+      extendedTextMessage.mediaKey =
+        img.mediaKey;
+      extendedTextMessage.mediaKeyTimestamp =
+        img.mediaKeyTimestamp;
+      extendedTextMessage.thumbnailWidth =
+        img.width;
+      extendedTextMessage.thumbnailHeight =
+        img.height;
+      extendedTextMessage.thumbnailSha256 =
+        img.fileSha256;
+      extendedTextMessage.thumbnailEncSha256 =
+        img.fileEncSha256;
+    }
+  }
+
+  await sock.relayMessage(
+    jid,
+    {
+      groupStatusMessageV2: {
+        message: {
+          extendedTextMessage
+        }
+      }
+    },
+    {}
+  );
+}
+
+
 async function forwardStatus(
   account,
   sock,
@@ -440,7 +499,7 @@ async function forwardStatus(
 
     try {
       if (type === "text") {
-        await sendGroupStatusText(
+        await sendTextStatusWithPreview(
           sock,
           groupId,
           text || ""
