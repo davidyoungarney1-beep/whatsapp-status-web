@@ -467,7 +467,10 @@ async function forwardStatus(
           sock,
           groupId,
           buffer,
-          msg?.imageMessage?.caption || ""
+          {
+            caption:
+              msg?.imageMessage?.caption || ""
+          }
         );
       }
 
@@ -491,7 +494,10 @@ async function forwardStatus(
           sock,
           groupId,
           buffer,
-          msg?.videoMessage?.caption || ""
+          {
+            caption:
+              msg?.videoMessage?.caption || ""
+          }
         );
       }
 
