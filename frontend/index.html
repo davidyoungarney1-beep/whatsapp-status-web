@@ -139,10 +139,58 @@ margin-top:14px;
 padding-top:14px
 }
 
+.group-header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+gap:10px;
+margin-bottom:10px;
+padding:10px;
+background:#f0f8f6;
+border-radius:8px;
+font-size:14px
+}
+
+.selected-count{
+font-weight:bold;
+color:#075e54
+}
+
 .group{
-display:block;
-padding:9px 0;
-border-bottom:1px solid #eee
+display:flex;
+align-items:center;
+gap:9px;
+padding:10px 4px;
+border-bottom:1px solid #eee;
+cursor:pointer
+}
+
+.group input{
+width:18px;
+height:18px;
+accent-color:#128c7e;
+cursor:pointer
+}
+
+.group-name{
+flex:1;
+font-size:14px
+}
+
+.selected-badge{
+font-size:11px;
+font-weight:bold;
+background:#dff5ef;
+color:#075e54;
+padding:4px 7px;
+border-radius:12px
+}
+
+.group-actions{
+margin-top:12px;
+display:flex;
+flex-wrap:wrap;
+gap:4px
 }
 
 .empty{
@@ -342,8 +390,8 @@ return;
 
 
 /*
-Preserve any group sections that
-are already open.
+Preserve any group sections
+that are already open.
 */
 
 const oldGroups={};
@@ -503,9 +551,25 @@ return;
 }
 
 
+const selectedCount=
+gs.filter(g=>g.selected).length;
+
+
 box.innerHTML=
 
-"<b>Select groups</b>"+
+`
+<div class="group-header">
+
+<span>
+<b>Groups</b>
+</span>
+
+<span class="selected-count">
+Selected: ${selectedCount}
+</span>
+
+</div>
+`+
 
 gs.map(g=>`
 
@@ -516,13 +580,20 @@ type="checkbox"
 class="cg-${id}"
 value="${esc(g.id)}"
 ${g.selected?"checked":""}
+onchange="updateSelectedCount('${id}')"
 >
 
+<span class="group-name">
 ${esc(
-g.subject||
 g.name||
+g.subject||
 g.id
 )}
+</span>
+
+${g.selected
+?'<span class="selected-badge">Selected</span>'
+:""}
 
 </label>
 
@@ -530,11 +601,30 @@ g.id
 
 `
 
+<div
+id="count-${id}"
+class="selected-count"
+style="margin-top:10px"
+>
+Selected: ${selectedCount} group${selectedCount===1?"":"s"}
+</div>
+
+<div class="group-actions">
+
 <button
 onclick="saveGroups('${id}')"
 >
-Save Selected Groups
+Save Groups
 </button>
+
+<button
+class="gray"
+onclick="groups('${id}')"
+>
+Refresh Groups
+</button>
+
+</div>
 
 `;
 
@@ -542,6 +632,43 @@ Save Selected Groups
 
 box.innerHTML=
 e.message;
+
+}
+
+}
+
+
+
+function updateSelectedCount(id){
+
+const boxes=
+document.querySelectorAll(
+".cg-"+id
+);
+
+let count=0;
+
+boxes.forEach(b=>{
+
+if(b.checked){
+count++;
+}
+
+});
+
+
+const counter=
+document.getElementById(
+"count-"+id
+);
+
+if(counter){
+
+counter.textContent=
+"Selected: "+
+count+
+" group"+
+(count===1?"":"s");
 
 }
 
@@ -609,8 +736,19 @@ d.error||"Save failed"
 
 
 alert(
-"Groups saved successfully."
+selected.length+
+" group"+
+(selected.length===1?"":"s")+
+" saved successfully."
 );
+
+
+/*
+Reload the group list so the
+Selected badges are accurate.
+*/
+
+await groups(id);
 
 }catch(e){
 
