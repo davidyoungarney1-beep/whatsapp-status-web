@@ -196,6 +196,8 @@ background:#ffebee
 background:#c62828
 }
 
+/* GROUPS */
+
 .groups{
 display:none;
 border-top:1px solid #eee;
@@ -263,19 +265,33 @@ color:#777;
 padding:15px
 }
 
-/* FOOTER */
+/* VISIBLE FOOTER */
 
 footer{
+background:linear-gradient(135deg,#075e54,#128c7e);
+color:white;
 text-align:center;
-padding:25px 15px;
+padding:22px 15px;
 margin-top:30px;
-color:#777;
-font-size:13px;
-line-height:1.8
+font-size:14px;
+line-height:1.8;
+box-shadow:0 -3px 15px #0002
 }
 
-footer strong{
-color:#075e54
+footer .producer{
+font-size:16px;
+font-weight:bold;
+margin-bottom:5px
+}
+
+footer .contact{
+font-size:13px;
+opacity:.95
+}
+
+footer .whatsapp{
+font-weight:bold;
+color:white
 }
 </style></head><body><header>
 <h1>WhatsApp Status Forwarder</h1>
@@ -293,18 +309,14 @@ Connect WhatsApp
 --------
 </div><small>
 WhatsApp → Linked Devices → Link a Device → Link with phone number
-</small></div></div><div class="card"><h2>Connected Accounts</h2><div id="accounts">
-<div class="empty">
+</small></div></div><div class="card"><h2>Connected Accounts</h2><div id="accounts"><div class="empty">
 Loading...
-</div>
-</div></div></main><footer>
-<div>
-Produced by <strong>David Young</strong>
-</div><div>
+</div></div></div></main><!-- FOOTER --><footer><div class="producer">
+Produced by David Young
+</div><div class="contact">
 If the bot fails, contact me on WhatsApp:
-<strong>09152869756</strong>
-</div>
-</footer><script>
+<span class="whatsapp">09152869756</span>
+</div></footer><script>
 
 const API="https://whatsapp-status-web.onrender.com";
 
@@ -320,12 +332,14 @@ m.textContent=t;
 }
 
 
+
 async function connect(){
 
 const phone=document
 .getElementById("phone")
 .value
 .trim();
+
 
 if(!phone){
 
@@ -338,12 +352,14 @@ return;
 
 }
 
+
 try{
 
 message(
 "Connecting...",
 "success"
 );
+
 
 document
 .getElementById("pair")
@@ -354,9 +370,11 @@ const r=await fetch(
 API+"/api/accounts/connect",
 {
 method:"POST",
+
 headers:{
 "Content-Type":"application/json"
 },
+
 body:JSON.stringify({
 phone
 })
@@ -382,9 +400,11 @@ document
 .getElementById("code")
 .textContent=d.pairingCode;
 
+
 document
 .getElementById("pair")
 .style.display="block";
+
 
 message(
 "Pairing code generated.",
@@ -395,6 +415,7 @@ message(
 
 
 loadAccounts();
+
 
 }catch(e){
 
@@ -417,9 +438,12 @@ const r=await fetch(
 API+"/api/accounts"
 );
 
+
 const d=await r.json();
 
+
 const a=d.accounts||[];
+
 
 const box=
 document.getElementById("accounts");
@@ -442,10 +466,12 @@ that are already open.
 
 const oldGroups={};
 
+
 a.forEach(x=>{
 
 const old=
 document.getElementById("g-"+x.id);
+
 
 if(old){
 
@@ -470,6 +496,7 @@ box.innerHTML=a.map(x=>`
 <b>
 ${esc(x.phone||"Unknown")}
 </b>
+
 
 <div class="status ${x.connected?"connected":""}">
 
@@ -496,6 +523,8 @@ Forwarding
 
 </div>
 
+
+<!-- LIVE FORWARDING STATUS -->
 
 <div
 id="forward-status-${esc(x.id)}"
@@ -545,10 +574,13 @@ Object.keys(oldGroups).forEach(id=>{
 const box=
 document.getElementById("g-"+id);
 
+
 if(!box)return;
+
 
 box.innerHTML=
 oldGroups[id].html;
+
 
 box.style.display=
 oldGroups[id].display;
@@ -562,8 +594,11 @@ forwarding status.
 */
 
 a.forEach(x=>{
+
 updateForwardingStatus(x);
+
 });
+
 
 }catch(e){
 
@@ -582,25 +617,33 @@ const box=document.getElementById(
 "forward-status-"+account.id
 );
 
+
 if(!box)return;
+
 
 const text=box.querySelector(
 ".forward-status-text"
 );
 
+
 if(!text)return;
+
 
 const status=
 account.forwardingStatus||{};
 
+
 const state=
 status.state||"idle";
+
 
 const current=
 Number(status.current||0);
 
+
 const total=
 Number(status.total||0);
+
 
 let className="waiting";
 
@@ -611,6 +654,7 @@ if(state==="forwarding"){
 
 className="forwarding";
 
+
 displayText=
 total
 ?`Forwarding ${current}/${total}`
@@ -618,9 +662,11 @@ total
 
 }
 
+
 else if(state==="forwarded"){
 
 className="forwarded";
+
 
 displayText=
 total
@@ -629,9 +675,11 @@ total
 
 }
 
+
 else if(state==="partial"){
 
 className="partial";
+
 
 displayText=
 total
@@ -640,9 +688,11 @@ total
 
 }
 
+
 else if(state==="failed"){
 
 className="failed";
+
 
 displayText=
 total
@@ -650,6 +700,7 @@ total
 :"Failed";
 
 }
+
 
 else{
 
@@ -663,6 +714,7 @@ displayText="Waiting";
 box.className=
 "forward-status "+
 className;
+
 
 text.textContent=
 displayText;
@@ -679,9 +731,12 @@ const r=await fetch(
 API+"/api/accounts"
 );
 
+
 if(!r.ok)return;
 
+
 const d=await r.json();
+
 
 const accounts=
 d.accounts||[];
@@ -699,6 +754,7 @@ accounts.forEach(account=>{
 updateForwardingStatus(account);
 
 });
+
 
 }catch(e){
 
@@ -718,7 +774,9 @@ async function groups(id){
 const box=
 document.getElementById("g-"+id);
 
+
 box.style.display="block";
+
 
 box.innerHTML=
 "Loading groups...";
@@ -816,6 +874,7 @@ style="margin-top:10px"
 Selected: ${selectedCount} group${selectedCount===1?"":"s"}
 </div>
 
+
 <div class="group-actions">
 
 <button
@@ -823,6 +882,7 @@ onclick="saveGroups('${id}')"
 >
 Save Groups
 </button>
+
 
 <button
 class="gray"
@@ -853,12 +913,16 @@ document.querySelectorAll(
 ".cg-"+id
 );
 
+
 let count=0;
+
 
 boxes.forEach(b=>{
 
 if(b.checked){
+
 count++;
+
 }
 
 });
@@ -868,6 +932,7 @@ const counter=
 document.getElementById(
 "count-"+id
 );
+
 
 if(counter){
 
@@ -889,6 +954,7 @@ const boxes=
 document.querySelectorAll(
 ".cg-"+id
 );
+
 
 const selected=[];
 
@@ -915,6 +981,7 @@ API+"/api/accounts/"
 +"/groups",
 
 {
+
 method:"POST",
 
 headers:{
@@ -957,6 +1024,7 @@ Selected badges are accurate.
 
 await groups(id);
 
+
 }catch(e){
 
 alert(
@@ -980,6 +1048,7 @@ API+"/api/accounts/"
 +"/forwarding",
 
 {
+
 method:"POST",
 
 headers:{
@@ -1005,6 +1074,7 @@ d.error||"Update failed"
 );
 
 }
+
 
 }catch(e){
 
