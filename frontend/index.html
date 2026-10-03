@@ -293,7 +293,7 @@ footer .whatsapp{
 font-weight:bold;
 color:white
 }
-.danger{background:#dc3545!important;color:white!important;margin-left:6px}.danger:hover{background:#b02a37!important}</style></head><body><header>
+.danger{background:#dc3545!important;color:white!important;border:0;border-radius:50%;width:24px;height:24px;padding:0;margin-left:8px;font-weight:bold;cursor:pointer}.danger:hover{background:#b02a37!important}</style></head><body><header>
 <h1>WhatsApp Status Forwarder</h1>
 <p>Forward your WhatsApp Status to selected groups.</p>
 </header><main><div class="card"><h2>Connect WhatsApp</h2><input
@@ -519,7 +519,7 @@ onchange="forward('${x.id}',this.checked)"
 
 Forwarding
 
-</label>
+</label><button class="danger" onclick="removeAccount('${x.id}')" title="Remove account">✕</button>
 
 </div>
 
@@ -540,7 +540,7 @@ Waiting
 </div>
 
 
- <button class="danger" onclick="removeAccount('${x.id}')">✕ Remove Account</button><button onclick="groups('${x.id}')">
+ <button onclick="groups('${x.id}')">
 Load Groups
 </button>
 
@@ -860,7 +860,7 @@ ${g.selected
 ?'<span class="selected-badge">Selected</span>'
 :""}
 
-</label>
+</label><button class="danger" onclick="removeAccount('${x.id}')" title="Remove account">✕</button>
 
 `).join("")+
 
