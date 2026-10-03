@@ -293,7 +293,7 @@ footer .whatsapp{
 font-weight:bold;
 color:white
 }
-</style></head><body><header>
+.danger{background:#dc3545!important;color:white!important;margin-left:6px}.danger:hover{background:#b02a37!important}</style></head><body><header>
 <h1>WhatsApp Status Forwarder</h1>
 <p>Forward your WhatsApp Status to selected groups.</p>
 </header><main><div class="card"><h2>Connect WhatsApp</h2><input
@@ -540,7 +540,7 @@ Waiting
 </div>
 
 
-<button onclick="groups('${x.id}')">
+ <button class="danger" onclick="removeAccount('${x.id}')">✕ Remove Account</button><button onclick="groups('${x.id}')">
 Load Groups
 </button>
 
@@ -1142,6 +1142,19 @@ setInterval(
 pollForwardingStatus,
 1500
 );
+
+async function removeAccount(id){
+  if(!confirm("Remove this WhatsApp account? This will disconnect it and delete its saved session.")) return;
+  try{
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id),{method:"DELETE"});
+    const d=await r.json();
+    if(!d.success) throw new Error(d.error||"Failed to remove account");
+    alert("Account removed successfully");
+    loadAccounts();
+  }catch(e){
+    alert("Failed to remove account: "+e.message);
+  }
+}
 
 </script></body>
 </html>
