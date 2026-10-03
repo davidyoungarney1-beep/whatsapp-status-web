@@ -298,30 +298,100 @@ footer .whatsapp{
 font-weight:bold;
 color:white
 }
-.danger{background:#dc3545!important;color:white!important;border:0;border-radius:50%;width:24px;height:24px;padding:0;margin-left:8px;font-weight:bold;cursor:pointer}.danger:hover{background:#b02a37!important}</style></head><body><header>
+
+.danger{
+background:#dc3545!important;
+color:white!important;
+border:0;
+border-radius:50%;
+width:24px;
+height:24px;
+padding:0;
+margin-left:8px;
+font-weight:bold;
+cursor:pointer
+}
+
+.danger:hover{
+background:#b02a37!important
+}
+</style></head>
+
+<body>
+
+<header>
 <h1>WhatsApp Status Forwarder</h1>
 <p>Forward your WhatsApp Status to selected groups.</p>
-</header><main><div class="card"><h2>Connect WhatsApp</h2><input
+</header>
+
+<main>
+
+<div class="card">
+
+<h2>Connect WhatsApp</h2>
+
+<input
 id="phone"
 type="text"
 placeholder="2348012345678"
-
-«»
+>
 
 <button onclick="connect()">
 Connect WhatsApp
-</button><div id="msg"></div><div id="pair" class="pair"><div>Pairing Code</div><div id="code" class="code">
+</button>
+
+<div id="msg"></div>
+
+<div id="pair" class="pair">
+
+<div>Pairing Code</div>
+
+<div id="code" class="code">
 --------
-</div><small>
+</div>
+
+<small>
 WhatsApp → Linked Devices → Link a Device → Link with phone number
-</small></div></div><div class="card"><h2>Connected Accounts</h2><div id="accounts"><div class="empty">
+</small>
+
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h2>Connected Accounts</h2>
+
+<div id="accounts">
+
+<div class="empty">
 Loading...
-</div></div></div></main><!-- FOOTER --><footer><div class="producer">
-Produced by DY 
-</div><div class="contact">
+</div>
+
+</div>
+
+</div>
+
+</main>
+
+<!-- FOOTER -->
+
+<footer>
+
+<div class="producer">
+Produced by DY
+</div>
+
+<div class="contact">
 If the bot fails, contact me on WhatsApp:
 <span class="whatsapp">09152869756</span>
-</div></footer><script>
+</div>
+
+</footer>
+
+
+<script>
 
 const API="https://whatsapp-status-web.onrender.com";
 
@@ -524,6 +594,13 @@ onchange="forward('${x.id}',this.checked)"
 
 Forwarding
 
+</label>
+
+<button
+class="danger"
+onclick="removeAccount('${x.id}')"
+title="Remove account"
+>✕</button>
 
 </div>
 
@@ -544,7 +621,7 @@ Waiting
 </div>
 
 
- <button onclick="groups('${x.id}')">
+<button onclick="groups('${x.id}')">
 Load Groups
 </button>
 
@@ -864,6 +941,7 @@ ${g.selected
 ?'<span class="selected-badge">Selected</span>'
 :""}
 
+</label>
 
 `).join("")+
 
@@ -1146,18 +1224,57 @@ pollForwardingStatus,
 1500
 );
 
+
 async function removeAccount(id){
-  if(!confirm("Remove this WhatsApp account? This will disconnect it and delete its saved session.")) return;
-  try{
-    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id),{method:"DELETE"});
-    const d=await r.json();
-    if(!d.success) throw new Error(d.error||"Failed to remove account");
-    alert("Account removed successfully");
-    loadAccounts();
-  }catch(e){
-    alert("Failed to remove account: "+e.message);
-  }
+
+if(!confirm(
+"Remove this WhatsApp account? This will disconnect it and delete its saved session."
+)) return;
+
+
+try{
+
+const r=await fetch(
+API+"/api/accounts/"
++encodeURIComponent(id),
+{
+method:"DELETE"
+}
+);
+
+
+const d=await r.json();
+
+
+if(!d.success){
+
+throw new Error(
+d.error||"Failed to remove account"
+);
+
 }
 
-</script></body>
+
+alert(
+"Account removed successfully"
+);
+
+
+loadAccounts();
+
+
+}catch(e){
+
+alert(
+"Failed to remove account: "+
+e.message
+);
+
+}
+
+}
+
+</script>
+
+</body>
 </html>
