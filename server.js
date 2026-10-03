@@ -553,7 +553,6 @@ async function forwardStatus(
       );
     }
   }
-}
   if (entry) {
     let finalState = "failed";
     let finalMessage = `Failed 0/${selectedGroups.length} groups`;
@@ -573,6 +572,7 @@ async function forwardStatus(
       message: finalMessage
     };
   }
+}
 
 async function connectWhatsApp(
   account,
