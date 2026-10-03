@@ -360,6 +360,14 @@ async function forwardStatus(
   sock,
   message
 ) {
+  const latestAccounts = readAccounts();
+  const latestAccount =
+    latestAccounts.find(
+      a => a.id === account.id
+    ) || account;
+
+  account = latestAccount;
+
   if (account.forwardingEnabled === false) {
     return;
   }
