@@ -223,14 +223,13 @@ color:#075e54
 }
 
 .group{
-display:flex;
+display:grid;
+grid-template-columns:18px minmax(0,1fr) auto;
 align-items:center;
 gap:9px;
 padding:10px 4px;
 border-bottom:1px solid #eee;
-cursor:pointer;
-white-space:nowrap;
-overflow:hidden
+cursor:pointer
 }
 
 .group input{
@@ -241,9 +240,8 @@ cursor:pointer
 }
 
 .group-name{
-flex:1;
-font-size:14px;
 min-width:0;
+font-size:14px;
 overflow:hidden;
 text-overflow:ellipsis;
 white-space:nowrap
@@ -254,8 +252,9 @@ font-size:11px;
 font-weight:bold;
 background:#dff5ef;
 color:#075e54;
-padding:4px 7px;
-border-radius:12px
+padding:3px 6px;
+border-radius:12px;
+white-space:nowrap
 }
 
 .group-actions{
