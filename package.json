@@ -17,6 +17,7 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
+    "link-preview-js": "^3.2.0",
     "mongodb": "^7.7.0",
     "pino": "^10.3.1",
     "sharp": "^0.35.5"
