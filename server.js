@@ -389,6 +389,7 @@ async function forwardStatus(
   const text = getText(message);
 
   for (const groupId of selectedGroups) {
+    console.log(`🎯 ATTEMPTING GROUP: ${groupId}`);
     try {
       if (type === "text") {
         await sendGroupStatusText(
