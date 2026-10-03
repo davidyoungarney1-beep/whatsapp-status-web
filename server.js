@@ -1302,6 +1302,16 @@ app.post(
           Boolean
         );
 
+      const connection = connections.get(accountId);
+      if (connection) {
+        connection.forwardingStatus = {
+          state: "idle",
+          current: 0,
+          total: 0,
+          message: "Waiting"
+        };
+      }
+
       saveAccounts(
         accounts
       );
