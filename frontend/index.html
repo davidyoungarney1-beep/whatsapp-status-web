@@ -228,7 +228,9 @@ align-items:center;
 gap:9px;
 padding:10px 4px;
 border-bottom:1px solid #eee;
-cursor:pointer
+cursor:pointer;
+white-space:nowrap;
+overflow:hidden
 }
 
 .group input{
@@ -240,7 +242,11 @@ cursor:pointer
 
 .group-name{
 flex:1;
-font-size:14px
+font-size:14px;
+min-width:0;
+overflow:hidden;
+text-overflow:ellipsis;
+white-space:nowrap
 }
 
 .selected-badge{
