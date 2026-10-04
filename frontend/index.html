@@ -1,9 +1,19 @@
-<!DOCTYPE html><html>
+<!DOCTYPE html>
+<html>
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WhatsApp Status Forwarder</title><style>
-*{box-sizing:border-box}
+
+<title>WhatsApp Status Forwarder</title>
+
+<style>
+
+*{
+box-sizing:border-box
+}
 
 body{
 margin:0;
@@ -67,6 +77,10 @@ margin:4px;
 cursor:pointer
 }
 
+button:hover{
+opacity:.92
+}
+
 .gray{
 background:#555
 }
@@ -128,6 +142,7 @@ margin-top:5px
 color:#128c7e;
 font-weight:bold
 }
+
 
 /* LIVE FORWARDING STATUS */
 
@@ -195,6 +210,7 @@ background:#ffebee
 .forward-status.failed .forward-dot{
 background:#c62828
 }
+
 
 /* GROUPS */
 
@@ -270,6 +286,97 @@ color:#777;
 padding:15px
 }
 
+
+/* HOW TO USE BUTTON */
+
+.help-button{
+background:white;
+color:#075e54;
+border:2px solid white;
+font-size:14px;
+margin-top:10px
+}
+
+.help-button:hover{
+background:#e8f5f2
+}
+
+
+/* HOW TO USE PANEL */
+
+.help-overlay{
+display:none;
+position:fixed;
+inset:0;
+background:#0008;
+z-index:9999;
+padding:18px;
+overflow-y:auto
+}
+
+.help-box{
+max-width:750px;
+margin:30px auto;
+background:white;
+border-radius:15px;
+padding:20px;
+box-shadow:0 10px 40px #0005
+}
+
+.help-box h2{
+color:#075e54;
+margin-top:0;
+font-size:21px
+}
+
+.help-box h3{
+color:#075e54;
+font-size:16px;
+margin-top:20px
+}
+
+.help-box ol{
+padding-left:22px
+}
+
+.help-box li{
+margin-bottom:14px;
+line-height:1.6
+}
+
+.help-box .important{
+background:#fff8df;
+border-left:4px solid #e0a800;
+padding:13px;
+border-radius:7px;
+margin-top:15px;
+line-height:1.6
+}
+
+.help-box .private{
+background:#eefaf7;
+border-left:4px solid #128c7e;
+padding:13px;
+border-radius:7px;
+margin-top:15px;
+line-height:1.6
+}
+
+.help-box .status-info{
+background:#f4f4f4;
+padding:13px;
+border-radius:7px;
+margin-top:15px;
+line-height:1.6
+}
+
+.close-help{
+background:#dc3545;
+width:100%;
+margin-top:15px
+}
+
+
 /* VISIBLE FOOTER */
 
 footer{
@@ -315,16 +422,28 @@ cursor:pointer
 .danger:hover{
 background:#b02a37!important
 }
-</style></head>
+
+</style>
+
+</head>
+
 
 <body>
 
+
 <header>
+
 <h1>WhatsApp Status Forwarder</h1>
-<p>Forward your WhatsApp Status to selected groups.</p>
+
+<p>
+Forward your WhatsApp Status to selected groups.
+</p>
+
 </header>
 
+
 <main>
+
 
 <div class="card">
 
@@ -342,9 +461,12 @@ Connect WhatsApp
 
 <div id="msg"></div>
 
+
 <div id="pair" class="pair">
 
-<div>Pairing Code</div>
+<div>
+Pairing Code
+</div>
 
 <div id="code" class="code">
 --------
@@ -373,7 +495,268 @@ Loading...
 
 </div>
 
+
 </main>
+
+
+<!-- HOW TO USE PANEL -->
+
+<div
+id="help-overlay"
+class="help-overlay"
+onclick="closeHelpOutside(event)"
+>
+
+<div
+class="help-box"
+onclick="event.stopPropagation()"
+>
+
+<h2>
+📱 How to Use the WhatsApp Status Forwarder
+</h2>
+
+
+<p>
+Follow these steps carefully to make sure your WhatsApp Status
+is forwarded to the groups you choose.
+</p>
+
+
+<h3>
+1. Connect Your WhatsApp
+</h3>
+
+<ol>
+
+<li>
+Enter your WhatsApp number and click
+<strong>Connect WhatsApp</strong>.
+</li>
+
+<li>
+A pairing code will appear.
+Enter the code in WhatsApp through:
+<br><br>
+<strong>
+WhatsApp → Linked Devices → Link a Device →
+Link with phone number
+</strong>
+</li>
+
+<li>
+After entering the pairing code,
+<strong>wait a little while on WhatsApp</strong>
+for the account to finish connecting.
+Do not close WhatsApp immediately.
+</li>
+
+<li>
+Wait until the website shows that your WhatsApp account is
+<strong>Connected</strong>.
+</li>
+
+</ol>
+
+
+<h3>
+2. Turn Forwarding ON
+</h3>
+
+<p>
+After your account connects, make sure the
+<strong>Forwarding</strong> switch is turned
+<strong>ON</strong>.
+</p>
+
+
+<h3>
+3. Load Your Groups
+</h3>
+
+<ol>
+
+<li>
+Click <strong>Load Groups</strong> under your connected WhatsApp account.
+</li>
+
+<li>
+Wait for your WhatsApp groups to appear.
+</li>
+
+<li>
+Select the groups where you want your WhatsApp Status to be posted.
+</li>
+
+</ol>
+
+
+<h3>
+4. IMPORTANT — Click Save Groups
+</h3>
+
+<div class="important">
+
+<strong>
+⚠️ Always click "Save Groups" after choosing your groups.
+</strong>
+
+<br><br>
+
+Whenever you want to post a new status,
+make sure you select the group or groups you want to use
+and then click <strong>Save Groups</strong> again.
+
+<br><br>
+
+After the groups are successfully saved,
+the forwarding status should return to
+<strong>Waiting</strong>.
+
+</div>
+
+
+<h3>
+5. Keep Your Personal Status Private
+</h3>
+
+<div class="private">
+
+Before posting your WhatsApp Status, go to:
+
+<br><br>
+
+<strong>
+WhatsApp → Settings → Privacy → Status
+</strong>
+
+<br><br>
+
+Choose:
+
+<strong>
+Only share with...
+</strong>
+
+<br><br>
+
+Then select
+<strong>ONLY ONE USER</strong>.
+
+<br><br>
+
+This means your normal WhatsApp friends and other contacts
+will not see the status. The bot will detect your status and
+forward it to the groups you selected.
+
+</div>
+
+
+<h3>
+6. Post Your Status
+</h3>
+
+<p>
+Now post your image, video, or text as a normal WhatsApp Status.
+</p>
+
+
+<h3>
+7. Watch the Forwarding Status
+</h3>
+
+<div class="status-info">
+
+<strong>Waiting</strong><br>
+The bot is ready and waiting for your next status.
+
+<br><br>
+
+<strong>Forwarding</strong><br>
+Your status has been detected and the bot has started
+forwarding it to your selected groups.
+
+<br><br>
+
+<strong>Forwarded</strong><br>
+The status has successfully been forwarded to the selected groups.
+
+<br><br>
+
+<strong>Partially Forwarded</strong><br>
+The status reached some of the selected groups but not all.
+
+<br><br>
+
+<strong>Failed</strong><br>
+The bot was unable to forward the status to the selected groups.
+
+</div>
+
+
+<h3>
+🔁 For Every New Status
+</h3>
+
+<p>
+
+Whenever you want to post another status:
+
+</p>
+
+<ol>
+
+<li>
+Choose the group or groups you want to receive it.
+</li>
+
+<li>
+Click <strong>Save Groups</strong>.
+</li>
+
+<li>
+Make sure the status shows <strong>Waiting</strong>.
+</li>
+
+<li>
+Post your WhatsApp Status while sharing it with
+<strong>ONLY ONE USER</strong>.
+</li>
+
+<li>
+Once the bot detects it, the status will change to
+<strong>Forwarding</strong>.
+</li>
+
+<li>
+Wait for it to show <strong>Forwarded</strong>.
+</li>
+
+</ol>
+
+
+<div class="important">
+
+<strong>⚠️ Important:</strong><br><br>
+
+Always make sure <strong>Forwarding is ON</strong>,
+your desired groups are selected, and you have clicked
+<strong>Save Groups</strong> before posting.
+
+</div>
+
+
+<button
+class="close-help"
+onclick="closeHelp()"
+>
+Close Instructions
+</button>
+
+</div>
+
+</div>
+
 
 <!-- FOOTER -->
 
@@ -388,12 +771,23 @@ If the bot fails, contact me on WhatsApp:
 <span class="whatsapp">09152869756</span>
 </div>
 
+
+<button
+class="help-button"
+onclick="openHelp()"
+>
+📖 How to Use the Bot
+</button>
+
 </footer>
+
 
 
 <script>
 
+
 const API="https://whatsapp-status-web.onrender.com";
+
 
 
 function message(t,c){
@@ -596,11 +990,14 @@ Forwarding
 
 </label>
 
+
 <button
 class="danger"
 onclick="removeAccount('${x.id}')"
 title="Remove account"
->✕</button>
+>
+✕
+</button>
 
 </div>
 
@@ -1204,6 +1601,45 @@ return String(v??"")
 
 
 /*
+HOW TO USE PANEL
+*/
+
+function openHelp(){
+
+document
+.getElementById("help-overlay")
+.style.display="block";
+
+document.body.style.overflow="hidden";
+
+}
+
+
+function closeHelp(){
+
+document
+.getElementById("help-overlay")
+.style.display="none";
+
+document.body.style.overflow="";
+
+}
+
+
+function closeHelpOutside(event){
+
+if(
+event.target.id==="help-overlay"
+){
+
+closeHelp();
+
+}
+
+}
+
+
+/*
 Initial account loading.
 */
 
@@ -1223,6 +1659,7 @@ setInterval(
 pollForwardingStatus,
 1500
 );
+
 
 
 async function removeAccount(id){
@@ -1277,4 +1714,5 @@ e.message
 </script>
 
 </body>
+
 </html>
