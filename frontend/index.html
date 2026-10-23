@@ -217,6 +217,17 @@ background:#c62828
 }
 
 
+/* POSTING MODES */
+.post-mode-panel{margin-top:14px;padding:14px;border:1px solid #dce7e3;border-radius:10px;background:#fbfefd}
+.mode-options{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.mode-option{background:#6b7280}
+.mode-option.active{background:#075e54;box-shadow:0 0 0 2px #d4eee7}
+.post-mode-panel input[type=url]{width:100%;padding:13px;border:1px solid #ddd;border-radius:8px;margin:4px 0 8px;font-size:15px}
+.manual-mode-note{padding:11px;background:#eef7f4;border-radius:8px;font-size:14px;line-height:1.55}
+.post-result{display:none;padding:10px;margin-top:8px;border-radius:7px;font-size:14px}
+.post-result.success{display:block;background:#e8f5e9;color:#2e7d32}
+.post-result.error{display:block;background:#ffebee;color:#c62828}
+
 /* GROUPS */
 
 .groups{
@@ -1095,6 +1106,23 @@ Waiting
 
 </div>
 
+<div class="post-mode-panel">
+  <b>Choose How to Post</b>
+  <div class="mode-options">
+    <button type="button" class="mode-option active" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Link Only)</button>
+    <button type="button" class="mode-option" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>
+  </div>
+  <div id="mode-direct-${x.id}">
+    <label for="link-url-${x.id}"><b>Website link</b></label>
+    <input type="url" id="link-url-${x.id}" placeholder="https://example.com" autocomplete="url">
+    <button type="button" onclick="postLinkStatus('${x.id}')">Post Link to My Status</button>
+    <div id="link-result-${x.id}" class="post-result"></div>
+    <small>Website Direct posts only the URL as a text status. It does not upload photos or videos.</small>
+  </div>
+  <div id="mode-manual-${x.id}" style="display:none">
+    <div class="manual-mode-note"><b>Manual mode:</b> Open WhatsApp on your phone and post your text, photo, or video to your Status as usual. If Forwarding is ON, the bot will forward that status to your selected groups.</div>
+  </div>
+</div>
 
 <button onclick="groups('${x.id}')">
 Load Groups
@@ -1324,6 +1352,52 @@ errors.
 }
 
 
+
+function setPostingMode(id, mode){
+  const direct=document.getElementById("mode-direct-"+id);
+  const manual=document.getElementById("mode-manual-"+id);
+  const directBtn=document.getElementById("mode-direct-btn-"+id);
+  const manualBtn=document.getElementById("mode-manual-btn-"+id);
+  if(!direct||!manual||!directBtn||!manualBtn)return;
+  direct.style.display=mode==="direct"?"block":"none";
+  manual.style.display=mode==="manual"?"block":"none";
+  directBtn.classList.toggle("active",mode==="direct");
+  manualBtn.classList.toggle("active",mode==="manual");
+}
+
+async function postLinkStatus(id){
+  const input=document.getElementById("link-url-"+id);
+  const result=document.getElementById("link-result-"+id);
+  const button=input?.parentElement?.querySelector('button[onclick^="postLinkStatus"]');
+  const value=(input?.value||"").trim();
+  let parsed;
+  try{parsed=new URL(value);}catch{}
+  if(!parsed||!["http:","https:"].includes(parsed.protocol)){
+    result.textContent="Enter a valid website link beginning with https:// or http://.";
+    result.className="post-result error";
+    return;
+  }
+  if(button){button.disabled=true;button.textContent="Posting link...";}
+  result.style.display="block";
+  result.className="post-result";
+  result.textContent="Sending your link to WhatsApp Status...";
+  try{
+    const response=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/post-link-status",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({url:parsed.href})
+    });
+    const data=await response.json();
+    if(!response.ok)throw Error(data.error||"Could not post the link.");
+    result.textContent=data.message||"Link posted to your WhatsApp Status.";
+    result.className="post-result success";
+  }catch(error){
+    result.textContent=error.message||"Could not post the link.";
+    result.className="post-result error";
+  }finally{
+    if(button){button.disabled=false;button.textContent="Post Link to My Status";}
+  }
+}
 
 async function groups(id){
 

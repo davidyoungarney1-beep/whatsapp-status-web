@@ -45,8 +45,8 @@ async function initializeMongoDB() {
     process.env.MONGODB_DB || "whatsapp_status_web"
   );
 
-  console.log("✅ MongoDB connected successfully");
-  console.log(`📦 Database: ${mongoDb.databaseName}`);
+  console.log("â MongoDB connected successfully");
+  console.log(`ð¦ Database: ${mongoDb.databaseName}`);
 }
 
 const ROOT = process.cwd();
@@ -77,7 +77,7 @@ function saveAccounts(accounts) {
   accountsCache = accounts;
 
   if (!mongoDb) {
-    console.error("❌ MongoDB is not initialized");
+    console.error("â MongoDB is not initialized");
     return;
   }
 
@@ -92,7 +92,7 @@ function saveAccounts(accounts) {
     { upsert: true }
   ).catch(error => {
     console.error(
-      "❌ Failed saving accounts to MongoDB:",
+      "â Failed saving accounts to MongoDB:",
       error?.message || error
     );
   });
@@ -124,7 +124,7 @@ async function initializeAccounts() {
     );
 
     console.log(
-      `📦 Loaded ${accountsCache.length} accounts from MongoDB`
+      `ð¦ Loaded ${accountsCache.length} accounts from MongoDB`
     );
 
     return;
@@ -160,7 +160,7 @@ async function initializeAccounts() {
     );
 
     console.log(
-      `📤 Migrated ${accountsCache.length} local accounts to MongoDB`
+      `ð¤ Migrated ${accountsCache.length} local accounts to MongoDB`
     );
   } else {
     await collection.updateOne(
@@ -174,7 +174,7 @@ async function initializeAccounts() {
       { upsert: true }
     );
 
-    console.log("📦 No existing accounts to migrate");
+    console.log("ð¦ No existing accounts to migrate");
   }
 }
 
@@ -442,7 +442,7 @@ async function forwardStatus(
 
   if (!selectedGroups.length) {
     console.log(
-      `ℹ️ No selected groups for ${account.phone}`
+      `â¹ï¸ No selected groups for ${account.phone}`
     );
     return;
   }
@@ -458,11 +458,11 @@ async function forwardStatus(
   }
 
   console.log(
-    `📲 Own Status detected from ${account.phone} (${type})`
+    `ð² Own Status detected from ${account.phone} (${type})`
   );
 
   console.log(
-    `📤 Selected groups (${selectedGroups.length}):`,
+    `ð¤ Selected groups (${selectedGroups.length}):`,
     selectedGroups
   );
 
@@ -470,7 +470,7 @@ async function forwardStatus(
 
   if (entry?.forwardingStatus?.state === "forwarding") {
     console.log(
-      `⏳ Forwarding already in progress for ${account.phone}`
+      `â³ Forwarding already in progress for ${account.phone}`
     );
     return;
   }
@@ -492,7 +492,7 @@ async function forwardStatus(
   for (let i = 0; i < selectedGroups.length; i++) {
     const groupId = selectedGroups[i];
 
-    console.log(`🎯 ATTEMPTING GROUP: ${groupId}`);
+    console.log(`ð¯ ATTEMPTING GROUP: ${groupId}`);
 
     if (entry) {
       entry.forwardingStatus = {
@@ -621,13 +621,13 @@ async function forwardStatus(
       successCount++;
 
       console.log(
-        `✅ Status forwarded to ${groupId}`
+        `â Status forwarded to ${groupId}`
       );
 
     } catch (error) {
       failureCount++;
       console.error(
-        `❌ Failed forwarding to ${groupId}:`,
+        `â Failed forwarding to ${groupId}:`,
         error?.message || error
       );
     }
@@ -677,7 +677,7 @@ async function getCurrentWhatsAppVersion() {
 
   cachedWhatsAppVersion = result.version;
   cachedWhatsAppVersionAt = now;
-  console.log(`🌐 Using live WhatsApp Web version ${result.version.join(".")}`);
+  console.log(`ð Using live WhatsApp Web version ${result.version.join(".")}`);
   return cachedWhatsAppVersion;
 }
 
@@ -713,7 +713,7 @@ async function connectWhatsApp(
             existing.pairingCode = code;
 
             console.log(
-              `🔐 Pairing code for ${account.phone}: ${code}`
+              `ð Pairing code for ${account.phone}: ${code}`
             );
 
             const waiter = pairingWaiters.get(account.id);
@@ -724,7 +724,7 @@ async function connectWhatsApp(
           } catch (error) {
             existing.pairingRequested = false;
             console.error(
-              `❌ Pairing code error for ${account.phone}:`,
+              `â Pairing code error for ${account.phone}:`,
               error?.message || error
             );
 
@@ -765,7 +765,8 @@ async function connectWhatsApp(
       current: 0,
       total: 0,
       message: "Waiting"
-    }
+    },
+    statusRecipients: new Set()
   };
 
   connections.set(
@@ -787,6 +788,22 @@ async function connectWhatsApp(
 
   entry.sock = sock;
 
+  const cacheStatusContacts = (contacts = []) => {
+    for (const contact of contacts || []) {
+      const jid = normalizeJid(contact?.id || contact?.jid || contact?.phoneNumber);
+      if (!jid || getOwnJids(sock).includes(jid)) continue;
+      if (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid")) {
+        entry.statusRecipients.add(jid);
+      }
+    }
+  };
+
+  sock.ev.on("contacts.upsert", cacheStatusContacts);
+  sock.ev.on("contacts.update", cacheStatusContacts);
+  sock.ev.on("messaging-history.set", ({ contacts = [] } = {}) => {
+    cacheStatusContacts(contacts);
+  });
+
   sock.ev.on(
     "creds.update",
     saveCreds
@@ -803,11 +820,11 @@ async function connectWhatsApp(
 
       if (qr) {
         entry.qr = qr;
-        console.log(`📷 QR code ready for ${account.id}`);
+        console.log(`ð· QR code ready for ${account.id}`);
       }
 
       console.log(
-        `🔄 ${account.id} connection:`,
+        `ð ${account.id} connection:`,
         connection || "update"
       );
 
@@ -825,7 +842,7 @@ async function connectWhatsApp(
 
         try {
           console.log(
-            `🔗 Preparing pairing code for ${account.phone}...`
+            `ð Preparing pairing code for ${account.phone}...`
           );
 
           await new Promise(
@@ -842,7 +859,7 @@ async function connectWhatsApp(
             code;
 
           console.log(
-            `🔐 Pairing code for ${account.phone}: ${code}`
+            `ð Pairing code for ${account.phone}: ${code}`
           );
 
           const waiter =
@@ -860,7 +877,7 @@ async function connectWhatsApp(
 
         } catch (error) {
           console.error(
-            "❌ Pairing code error:",
+            "â Pairing code error:",
             error?.message || error
           );
 
@@ -912,7 +929,7 @@ async function connectWhatsApp(
         }
 
         console.log(
-          `✅ WhatsApp Connected: ${account.phone}`
+          `â WhatsApp Connected: ${account.phone}`
         );
       }
 
@@ -937,22 +954,22 @@ async function connectWhatsApp(
           DisconnectReason.loggedOut;
 
         console.log(
-          `⚠️ WhatsApp disconnected: ${account.id}`
+          `â ï¸ WhatsApp disconnected: ${account.id}`
         );
 
         console.log(
-          `❗ Disconnect status code: ${statusCode ?? "unknown"}`
+          `â Disconnect status code: ${statusCode ?? "unknown"}`
         );
 
         console.log(
-          "❗ Disconnect error:",
+          "â Disconnect error:",
           lastDisconnect?.error?.message ||
           lastDisconnect?.error ||
           "unknown"
         );
 
         console.log(
-          `🔄 Reconnect: ${shouldReconnect}`
+          `ð Reconnect: ${shouldReconnect}`
         );
 
         if (shouldReconnect) {
@@ -970,7 +987,7 @@ async function connectWhatsApp(
 
               } catch (error) {
                 console.error(
-                  `❌ Reconnect failed for ${account.phone}:`,
+                  `â Reconnect failed for ${account.phone}:`,
                   error?.message ||
                     error
                 );
@@ -1021,11 +1038,11 @@ async function connectWhatsApp(
           }
 
           console.log(
-            `📡 Possible Status event for ${account.phone}`
+            `ð¡ Possible Status event for ${account.phone}`
           );
 
           console.log(
-            `📡 Status event received for ${account.phone}`
+            `ð¡ Status event received for ${account.phone}`
           );
 
           if (
@@ -1035,7 +1052,7 @@ async function connectWhatsApp(
             )
           ) {
             console.log(
-              "ℹ️ Status belongs to another contact"
+              "â¹ï¸ Status belongs to another contact"
             );
 
             continue;
@@ -1049,7 +1066,7 @@ async function connectWhatsApp(
 
         } catch (error) {
           console.error(
-            "❌ Status handler error:",
+            "â Status handler error:",
             error?.message ||
               error
           );
@@ -1190,12 +1207,12 @@ app.post(
         saveAccounts(accounts);
 
         console.log(
-          `➕ New account created: ${phone}`
+          `â New account created: ${phone}`
         );
 
       } else {
         console.log(
-          `♻️ Existing account found: ${phone}`
+          `â»ï¸ Existing account found: ${phone}`
         );
       }
 
@@ -1308,12 +1325,12 @@ app.post(
         pairingCode: code,
 
         message:
-          "Enter this code in WhatsApp → Linked Devices → Link a Device → Link with phone number instead."
+          "Enter this code in WhatsApp â Linked Devices â Link a Device â Link with phone number instead."
       });
 
     } catch (error) {
       console.error(
-        "❌ Connect error:",
+        "â Connect error:",
         error?.message ||
           error
       );
@@ -1412,7 +1429,7 @@ app.get(
 );
 
 
-app.delete("/api/accounts/:accountId", async (req,res) => { const id=req.params.accountId; try { const accounts=readAccounts(); const account=accounts.find(a=>a.id===id); if(!account) return res.status(404).json({success:false,error:"Account not found"}); try { await connections.get(id)?.sock?.logout(); } catch {} connections.delete(id); pairingWaiters.delete(id); reconnecting.delete(id); await mongoDb.collection("whatsapp_auth_creds").deleteMany({accountId:id}); await mongoDb.collection("whatsapp_auth_keys").deleteMany({accountId:id}); saveAccounts(accounts.filter(a=>a.id!==id)); res.json({success:true,message:"Account removed successfully"}); } catch(error) { console.error("❌ Remove account error:",error); res.status(500).json({success:false,error:"Failed to remove account"}); } });
+app.delete("/api/accounts/:accountId", async (req,res) => { const id=req.params.accountId; try { const accounts=readAccounts(); const account=accounts.find(a=>a.id===id); if(!account) return res.status(404).json({success:false,error:"Account not found"}); try { await connections.get(id)?.sock?.logout(); } catch {} connections.delete(id); pairingWaiters.delete(id); reconnecting.delete(id); await mongoDb.collection("whatsapp_auth_creds").deleteMany({accountId:id}); await mongoDb.collection("whatsapp_auth_keys").deleteMany({accountId:id}); saveAccounts(accounts.filter(a=>a.id!==id)); res.json({success:true,message:"Account removed successfully"}); } catch(error) { console.error("â Remove account error:",error); res.status(500).json({success:false,error:"Failed to remove account"}); } });
 
 /*
 |--------------------------------------------------------------------------
@@ -1493,7 +1510,7 @@ app.get(
 
     } catch (error) {
       console.error(
-        "❌ Group fetch error:",
+        "â Group fetch error:",
         error?.message ||
           error
       );
@@ -1592,6 +1609,56 @@ app.post(
 */
 
 app.post(
+  "/api/accounts/:accountId/post-link-status",
+  async (req, res) => {
+    try {
+      const account = readAccounts().find(
+        item => item.id === req.params.accountId
+      );
+      if (!account) {
+        return res.status(404).json({ success: false, error: "Account not found" });
+      }
+
+      const connection = connections.get(account.id);
+      if (!connection?.connected || !connection?.sock) {
+        return res.status(400).json({ success: false, error: "Connect this WhatsApp account first." });
+      }
+
+      const rawUrl = String(req.body?.url || "").trim();
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(rawUrl);
+      } catch {
+        return res.status(400).json({ success: false, error: "Enter a valid website link." });
+      }
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        return res.status(400).json({ success: false, error: "Only http:// and https:// links are allowed." });
+      }
+
+      const recipients = [...(connection.statusRecipients || [])];
+      if (!recipients.length) {
+        return res.status(400).json({
+          success: false,
+          error: "WhatsApp contacts have not synced yet. Reconnect this account, wait for contacts to load, then try again."
+        });
+      }
+
+      // Direct website mode intentionally posts only the URL as a text Status.
+      await connection.sock.sendMessage(
+        "status@broadcast",
+        { text: parsedUrl.href },
+        { statusJidList: recipients, broadcast: true }
+      );
+      console.log(`Website link Status posted for ${account.phone} to ${recipients.length} contacts: ${parsedUrl.href}`);
+      return res.json({ success: true, message: "Your website link was sent to WhatsApp Status." });
+    } catch (error) {
+      console.error("Link Status posting failed:", error?.message || error);
+      return res.status(500).json({ success: false, error: error?.message || "Failed to post the website link." });
+    }
+  }
+);
+
+app.post(
   "/api/accounts/:accountId/forwarding",
   (req, res) => {
     try {
@@ -1619,7 +1686,7 @@ app.post(
       }
 
       console.log(
-        `🔀 Forwarding ${
+        `ð Forwarding ${
           enabled
             ? "ON"
             : "OFF"
@@ -1665,10 +1732,10 @@ async function startServer() {
           "======================================"
         );
         console.log(
-          "🚀 WhatsApp Status Web Backend"
+          "ð WhatsApp Status Web Backend"
         );
         console.log(
-          `🌐 Port: ${PORT}`
+          `ð Port: ${PORT}`
         );
         console.log(
           "======================================"
@@ -1679,7 +1746,7 @@ async function startServer() {
           readAccounts();
 
         console.log(
-          `📱 Saved accounts: ${accounts.length}`
+          `ð± Saved accounts: ${accounts.length}`
         );
 
         /*
@@ -1691,7 +1758,7 @@ async function startServer() {
             null
           ).catch(error => {
             console.error(
-              `❌ Failed restoring ${account.phone}:`,
+              `â Failed restoring ${account.phone}:`,
               error?.message ||
               error
             );
@@ -1701,7 +1768,7 @@ async function startServer() {
     );
   } catch (error) {
     console.error(
-      "❌ Startup initialization failed:",
+      "â Startup initialization failed:",
       error?.message ||
       error
     );
