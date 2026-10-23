@@ -1073,9 +1073,24 @@ async function connectWhatsApp(
               account.phone
             )
           ) {
-            console.log(
-              "â¹ï¸ Status belongs to another contact"
-            );
+            const maskJid = (value) => {
+              const normalized = normalizeJid(value);
+              if (!normalized) return null;
+              const [local, domain] = normalized.split("@");
+              const digits = String(local || "").replace(/\D/g, "");
+              return `${domain || "unknown"}:${digits ? digits.slice(-4) : String(local).slice(-4)}`;
+            };
+            console.log("Status ownership mismatch (safe diagnostics):", JSON.stringify({
+              fromMe: message?.key?.fromMe ?? null,
+              account: maskJid(`${account.phone}@s.whatsapp.net`),
+              sockUser: maskJid(sock?.user?.id),
+              sockLid: maskJid(sock?.user?.lid),
+              participant: maskJid(message?.key?.participant || message?.participant),
+              senderPn: maskJid(message?.key?.senderPn),
+              senderLid: maskJid(message?.key?.senderLid),
+              remoteAlt: maskJid(message?.key?.remoteJidAlt)
+            }));
+            console.log("Status belongs to another contact");
 
             continue;
           }
