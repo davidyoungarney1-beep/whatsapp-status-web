@@ -282,47 +282,18 @@ function getMessageType(message) {
   return null;
 }
 
-function isOwnStatus(message, sock) {
-  const remoteJid =
-    normalizeJid(message?.key?.remoteJid);
-
-  const remoteJidAlt =
-    normalizeJid(
-      message?.key?.remoteJidAlt
-    );
-
-  const isStatus =
-    remoteJid === "status@broadcast" ||
-    remoteJid?.endsWith("@broadcast") ||
-    remoteJidAlt === "status@broadcast" ||
-    remoteJidAlt?.endsWith("@broadcast");
-
-  if (!isStatus) {
-    return false;
-  }
-
-  // WhatsApp can emit our own Status update without a participant/sender JID,
-  // especially when it was posted from the linked phone. In that case `fromMe`
-  // is the reliable signal; requiring a sender JID caused manual statuses to be
-  // incorrectly classified as someone else's and silently ignored.
-  if (message?.key?.fromMe === true) {
-    return true;
-  }
-
+function isOwnStatus(message, sock, accountPhone = '') {
+  const remoteJid = normalizeJid(message?.key?.remoteJid);
+  const remoteJidAlt = normalizeJid(message?.key?.remoteJidAlt);
+  const isStatus = remoteJid === 'status@broadcast' || remoteJid?.endsWith('@broadcast') || remoteJidAlt === 'status@broadcast' || remoteJidAlt?.endsWith('@broadcast');
+  if (!isStatus) return false;
+  if (message?.key?.fromMe === true) return true;
   const ownJids = getOwnJids(sock);
-  const possibleSenders = [
-    message?.key?.participant,
-    message?.participant,
-    message?.key?.senderPn,
-    message?.key?.senderLid,
-    message?.key?.remoteJidAlt
-  ]
-    .filter(Boolean)
-    .map(normalizeJid);
-
-  return possibleSenders.some(sender =>
-    ownJids.some(own => sameJid(sender, own))
-  );
+  const possibleSenders = [message?.key?.participant, message?.participant, message?.key?.senderPn, message?.key?.senderLid, message?.key?.remoteJidAlt].filter(Boolean).map(normalizeJid);
+  if (possibleSenders.some(sender => ownJids.some(own => sameJid(sender, own)))) return true;
+  const ownPhone = Array.from(String(accountPhone || '')).filter(ch => ch >= '0' && ch <= '9').join('');
+  if (!ownPhone) return false;
+  return possibleSenders.some(sender => sender.endsWith('@s.whatsapp.net') && Array.from(sender.split('@')[0]).filter(ch => ch >= '0' && ch <= '9').join('') === ownPhone);
 }
 
 function accountPublic(account) {
@@ -501,7 +472,7 @@ async function forwardStatus(
     return;
   }
 
-  if (!isOwnStatus(message, sock)) {
+  if (!isOwnStatus(message, sock, account.phone)) {
     return;
   }
 
@@ -1098,7 +1069,8 @@ async function connectWhatsApp(
           if (
             !isOwnStatus(
               message,
-              sock
+              sock,
+              account.phone
             )
           ) {
             console.log(
