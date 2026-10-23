@@ -1624,15 +1624,13 @@ app.post(
         return res.status(400).json({ success: false, error: "Connect this WhatsApp account first." });
       }
 
-      const rawUrl = String(req.body?.url || "").trim();
-      let parsedUrl;
-      try {
-        parsedUrl = new URL(rawUrl);
-      } catch {
-        return res.status(400).json({ success: false, error: "Enter a valid website link." });
+      // Direct mode accepts text only: plain text or a URL (which may receive a WhatsApp link preview).
+      const statusText = String(req.body?.text ?? req.body?.url ?? "").trim();
+      if (!statusText) {
+        return res.status(400).json({ success: false, error: "Write some text or paste a website link first." });
       }
-      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-        return res.status(400).json({ success: false, error: "Only http:// and https:// links are allowed." });
+      if (statusText.length > 700) {
+        return res.status(400).json({ success: false, error: "WhatsApp text Status can contain up to 700 characters." });
       }
 
       const recipients = [...(connection.statusRecipients || [])];
@@ -1643,20 +1641,22 @@ app.post(
         });
       }
 
-      // Direct website mode intentionally posts only the URL as a text Status.
+      // Sending text through Baileys allows WhatsApp to generate a link preview when supported.
+      // This route never accepts or sends image/video media.
       await connection.sock.sendMessage(
         "status@broadcast",
-        { text: parsedUrl.href },
+        { text: statusText, linkPreview: true },
         { statusJidList: recipients, broadcast: true }
       );
-      console.log(`Website link Status posted for ${account.phone} to ${recipients.length} contacts: ${parsedUrl.href}`);
-      return res.json({ success: true, message: "Your website link was sent to WhatsApp Status." });
+      console.log(`Text Status posted for ${account.phone} to ${recipients.length} contacts.`);
+      return res.json({ success: true, message: "Your text or link was posted to WhatsApp Status. WhatsApp may show a link preview when available." });
     } catch (error) {
-      console.error("Link Status posting failed:", error?.message || error);
-      return res.status(500).json({ success: false, error: error?.message || "Failed to post the website link." });
+      console.error("Text Status posting failed:", error?.message || error);
+      return res.status(500).json({ success: false, error: error?.message || "Failed to post the text Status." });
     }
   }
 );
+
 
 app.post(
   "/api/accounts/:accountId/forwarding",
