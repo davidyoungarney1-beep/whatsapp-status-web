@@ -301,13 +301,21 @@ function isOwnStatus(message, sock) {
     return false;
   }
 
-  const ownJids = getOwnJids(sock);
+  // WhatsApp can emit our own Status update without a participant/sender JID,
+  // especially when it was posted from the linked phone. In that case `fromMe`
+  // is the reliable signal; requiring a sender JID caused manual statuses to be
+  // incorrectly classified as someone else's and silently ignored.
+  if (message?.key?.fromMe === true) {
+    return true;
+  }
 
+  const ownJids = getOwnJids(sock);
   const possibleSenders = [
     message?.key?.participant,
     message?.participant,
     message?.key?.senderPn,
-    message?.key?.senderLid
+    message?.key?.senderLid,
+    message?.key?.remoteJidAlt
   ]
     .filter(Boolean)
     .map(normalizeJid);
