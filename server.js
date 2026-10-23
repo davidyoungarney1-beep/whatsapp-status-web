@@ -84,11 +84,47 @@ function parseWhatsAppInvite(value) {
 }
 async function saveSharedJoinGroup(item) {
   const collection = mongoDb.collection("join_groups");
-  await collection.updateOne({ _id: item.code }, { $setOnInsert: { _id: item.code, ...item, addedAt: new Date().toISOString() } }, { upsert: true });
-  return collection.findOne({ _id: item.code });
+  const parsed = parseWhatsAppInvite(item.link || item.code || item._id);
+  const code = parsed?.code || String(item.code || item._id || "").trim();
+  if (!code) throw new Error("A valid WhatsApp invite code is required");
+  const link = "https://chat.whatsapp.com/" + code;
+  // A stable invite code is the canonical ID, so repeated Add Group / Save Groups
+  // requests update the same record instead of creating another library entry.
+  await collection.updateOne(
+    { _id: code },
+    { $setOnInsert: { ...item, _id: code, code, link, addedAt: new Date().toISOString() } },
+    { upsert: true }
+  );
+  // Remove legacy records that contain this same invite under another ID.
+  const all = await collection.find({}).toArray();
+  const duplicates = all.filter(row => {
+    if (String(row._id) === code) return false;
+    const rowInvite = parseWhatsAppInvite(row.link || row.code || row._id);
+    return rowInvite?.code === code;
+  }).map(row => row._id);
+  if (duplicates.length) await collection.deleteMany({ _id: { $in: duplicates } });
+  return collection.findOne({ _id: code });
 }
 async function listSharedJoinGroups() {
-  return mongoDb.collection("join_groups").find({}).sort({ addedAt: -1 }).toArray();
+  const rows = await mongoDb.collection("join_groups").find({}).sort({ addedAt: -1 }).toArray();
+  // Hide and clean any duplicates left by older versions or differently formatted URLs.
+  const seen = new Set();
+  const unique = [];
+  const duplicateIds = [];
+  for (const row of rows) {
+    const parsed = parseWhatsAppInvite(row.link || row.code || row._id);
+    const code = parsed?.code || String(row.code || row._id || "").trim();
+    if (!code || seen.has(code)) {
+      duplicateIds.push(row._id);
+      continue;
+    }
+    seen.add(code);
+    unique.push({ ...row, _id: code, code, link: "https://chat.whatsapp.com/" + code });
+  }
+  if (duplicateIds.length) {
+    await mongoDb.collection("join_groups").deleteMany({ _id: { $in: duplicateIds } });
+  }
+  return unique;
 }
 
 
