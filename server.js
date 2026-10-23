@@ -656,6 +656,53 @@ async function connectWhatsApp(
       connections.get(account.id);
 
     if (existing.sock) {
+      /*
+       * Startup restoration creates the socket without a phone number.
+       * If the user later requests pairing for that same saved account,
+       * the original connection listener cannot see the new phone argument.
+       * Request the code on the existing unregistered socket instead.
+       */
+      if (
+        phoneForPairing &&
+        existing.registered === false &&
+        !existing.pairingRequested
+      ) {
+        existing.pairingRequested = true;
+
+        (async () => {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            const code = await existing.sock.requestPairingCode(
+              phoneForPairing
+            );
+            existing.pairingCode = code;
+
+            console.log(
+              `🔐 Pairing code for ${account.phone}: ${code}`
+            );
+
+            const waiter = pairingWaiters.get(account.id);
+            if (waiter) {
+              pairingWaiters.delete(account.id);
+              waiter.resolve(code);
+            }
+          } catch (error) {
+            existing.pairingRequested = false;
+            console.error(
+              `❌ Pairing code error for ${account.phone}:`,
+              error?.message || error
+            );
+
+            const waiter = pairingWaiters.get(account.id);
+            if (waiter) {
+              pairingWaiters.delete(account.id);
+              waiter.reject(error);
+            }
+          }
+        })();
+      }
+
       return existing.sock;
     }
   }
@@ -675,6 +722,7 @@ async function connectWhatsApp(
   const entry = {
     sock: null,
     connected: false,
+    registered: Boolean(state.creds.registered),
     pairingCode: null,
     pairingRequested: false,
     forwardingStatus: {
@@ -793,6 +841,7 @@ async function connectWhatsApp(
 
       if (connection === "open") {
         entry.connected = true;
+        entry.registered = true;
 
         updateAccount(
           account.id,
