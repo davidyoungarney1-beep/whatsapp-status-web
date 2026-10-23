@@ -1113,11 +1113,11 @@ Waiting
     <button type="button" class="mode-option" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>
   </div>
   <div id="mode-direct-${x.id}">
-    <label for="link-url-${x.id}"><b>Website link</b></label>
-    <input type="url" id="link-url-${x.id}" placeholder="https://example.com" autocomplete="url">
-    <button type="button" onclick="postLinkStatus('${x.id}')">Post Link to My Status</button>
+    <label for="link-url-${x.id}"><b>Text or website link</b></label>
+    <textarea id="link-url-${x.id}" rows="4" maxlength="700" placeholder="Write your text status or paste a website link..."></textarea>
+    <button type="button" onclick="postLinkStatus('${x.id}')">Post Text to My Status</button>
     <div id="link-result-${x.id}" class="post-result"></div>
-    <small>Website Direct posts only the URL as a text status. It does not upload photos or videos.</small>
+    <small>Direct mode supports plain text or links only. Photos and videos are excluded. WhatsApp may show a link preview when available.</small>
   </div>
   <div id="mode-manual-${x.id}" style="display:none">
     <div class="manual-mode-note"><b>Manual mode:</b> Open WhatsApp on your phone and post your text, photo, or video to your Status as usual. If Forwarding is ON, the bot will forward that status to your selected groups.</div>
@@ -1370,32 +1370,37 @@ async function postLinkStatus(id){
   const result=document.getElementById("link-result-"+id);
   const button=input?.parentElement?.querySelector('button[onclick^="postLinkStatus"]');
   const value=(input?.value||"").trim();
-  let parsed;
-  try{parsed=new URL(value);}catch{}
-  if(!parsed||!["http:","https:"].includes(parsed.protocol)){
-    result.textContent="Enter a valid website link beginning with https:// or http://.";
+  if(!value){
+    result.textContent="Write some text or paste a website link first.";
     result.className="post-result error";
+    result.style.display="block";
     return;
   }
-  if(button){button.disabled=true;button.textContent="Posting link...";}
+  if(value.length>700){
+    result.textContent="WhatsApp text Status can contain up to 700 characters.";
+    result.className="post-result error";
+    result.style.display="block";
+    return;
+  }
+  if(button){button.disabled=true;button.textContent="Posting text...";}
   result.style.display="block";
   result.className="post-result";
-  result.textContent="Sending your link to WhatsApp Status...";
+  result.textContent="Sending your text to WhatsApp Status...";
   try{
     const response=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/post-link-status",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({url:parsed.href})
+      body:JSON.stringify({text:value})
     });
     const data=await response.json();
-    if(!response.ok)throw Error(data.error||"Could not post the link.");
-    result.textContent=data.message||"Link posted to your WhatsApp Status.";
+    if(!response.ok)throw Error(data.error||"Could not post the text status.");
+    result.textContent=data.message||"Text posted to your WhatsApp Status.";
     result.className="post-result success";
   }catch(error){
-    result.textContent=error.message||"Could not post the link.";
+    result.textContent=error.message||"Could not post the text status.";
     result.className="post-result error";
   }finally{
-    if(button){button.disabled=false;button.textContent="Post Link to My Status";}
+    if(button){button.disabled=false;button.textContent="Post Text to My Status";}
   }
 }
 
