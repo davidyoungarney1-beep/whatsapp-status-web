@@ -1872,4 +1872,48 @@ if(!confirm(
 
 try{
 
-con
+const r=await fetch(
+API+"/api/accounts/"
++encodeURIComponent(id),
+{
+method:"DELETE"
+}
+);
+
+
+const d=await r.json();
+
+
+if(!d.success){
+
+throw new Error(
+d.error||"Failed to remove account"
+);
+
+}
+
+
+alert(
+"Account removed successfully"
+);
+
+
+loadAccounts();
+
+
+}catch(e){
+
+alert(
+"Failed to remove account: "+
+e.message
+);
+
+}
+
+}
+
+</script>
+
+</body>
+
+</html>

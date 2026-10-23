@@ -1954,4 +1954,112 @@ app.post(
         req.body?.enabled !== false;
 
       const account =
-        u
+        updateAccount(
+          accountId,
+          {
+            forwardingEnabled:
+              enabled
+          }
+        );
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error:
+            "Account not found"
+        });
+      }
+
+      console.log(
+        `ð Forwarding ${
+          enabled
+            ? "ON"
+            : "OFF"
+        } for ${account.phone}`
+      );
+
+      res.json({
+        success: true,
+
+        account:
+          accountPublic(account)
+      });
+
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error:
+          error?.message ||
+          "Failed to update forwarding"
+      });
+    }
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| START SERVER
+|--------------------------------------------------------------------------
+*/
+
+async function startServer() {
+  try {
+    await initializeMongoDB();
+    await initializeAccounts();
+
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log("");
+        console.log(
+          "======================================"
+        );
+        console.log(
+          "ð WhatsApp Status Web Backend"
+        );
+        console.log(
+          `ð Port: ${PORT}`
+        );
+        console.log(
+          "======================================"
+        );
+        console.log("");
+
+        const accounts =
+          readAccounts();
+
+        console.log(
+          `ð± Saved accounts: ${accounts.length}`
+        );
+
+        /*
+         * Restore saved WhatsApp sessions.
+         */
+        for (const account of accounts) {
+          connectWhatsApp(
+            account,
+            null
+          ).catch(error => {
+            console.error(
+              `â Failed restoring ${account.phone}:`,
+              error?.message ||
+              error
+            );
+          });
+        }
+      }
+    );
+  } catch (error) {
+    console.error(
+      "â Startup initialization failed:",
+      error?.message ||
+      error
+    );
+
+    process.exit(1);
+  }
+}
+
+startServer();
