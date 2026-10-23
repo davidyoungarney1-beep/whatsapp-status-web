@@ -363,6 +363,22 @@ function updateAccount(id, changes) {
   return accounts[index];
 }
 
+async function getUnlockedGroups(sock, groupIds) {
+  let metadata = {};
+  try { metadata = await sock.groupFetchAllParticipating(); }
+  catch (error) { console.warn("Could not pre-check group restrictions; runtime checks will be used:", error?.message || error); }
+  const unlocked = [], skipped = [];
+  for (const id of groupIds) {
+    if (metadata?.[id]?.announce === true) skipped.push({ id, reason: "admin-only/locked group" });
+    else unlocked.push(id);
+  }
+  return { unlocked, skipped };
+}
+function isLockedGroupError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return /not.?authori[sz]ed|forbidden|admin.?only|group.?locked|group.?restricted|not.?allowed|permission denied|not a participant|not.?participant|status.?not.?allowed/.test(message);
+}
+
 async function sendTextStatusWithPreview(sock, jid, text) {
   const urlInfo = await getUrlInfo(text, {
     thumbnailWidth: 192,
@@ -454,13 +470,26 @@ async function forwardStatus(
     return;
   }
 
-  const selectedGroups =
-    account.selectedGroups || [];
+  const requestedGroups = account.selectedGroups || [];
+  const groupCheck = await getUnlockedGroups(sock, requestedGroups);
+  const selectedGroups = groupCheck.unlocked;
+  let skippedLocked = groupCheck.skipped.length;
 
-  if (!selectedGroups.length) {
+  if (!requestedGroups.length) {
     console.log(
       `â¹ï¸ No selected groups for ${account.phone}`
     );
+    return;
+  }
+
+  if (!selectedGroups.length) {
+    const lockedEntry = connections.get(account.id);
+    if (lockedEntry) lockedEntry.forwardingStatus = {
+      state: "forwarded", current: 0, total: 0, attempting: 0,
+      skipped: skippedLocked, startedAt: Date.now(), etaSeconds: 0,
+      message: `Forwarded 0/0 unlocked groups; skipped ${skippedLocked} locked`
+    };
+    console.log(`All selected groups are locked/admin-only for ${account.phone}; skipped ${skippedLocked}.`);
     return;
   }
 
@@ -498,6 +527,7 @@ async function forwardStatus(
       current: 0,
       total: selectedGroups.length,
       attempting: 0,
+      skipped: skippedLocked,
       startedAt: Date.now(),
       etaSeconds: selectedGroups.length * 30,
       message: `Forwarded 0/${selectedGroups.length}`
@@ -648,11 +678,13 @@ async function forwardStatus(
       );
 
     } catch (error) {
-      failureCount++;
-      console.error(
-        `â Failed forwarding to ${groupId}:`,
-        error?.message || error
-      );
+      if (isLockedGroupError(error)) {
+        skippedLocked++;
+        console.log(`Skipping locked/restricted group ${groupId}: ${error?.message || error}`);
+      } else {
+        failureCount++;
+        console.error(`Failed forwarding to ${groupId}:`, error?.message || error);
+      }
     }
   }
   if (entry) {
@@ -672,9 +704,10 @@ async function forwardStatus(
       current: successCount,
       total: selectedGroups.length,
       attempting: selectedGroups.length,
+      skipped: skippedLocked,
       startedAt: entry.forwardingStatus.startedAt,
       etaSeconds: 0,
-      message: finalMessage
+      message: `${finalMessage}; skipped ${skippedLocked} locked; ${failureCount} failed`
     };
   }
 }
@@ -1660,8 +1693,11 @@ app.post(
     }
 
     const latestAccount = readAccounts().find(item => item.id === account.id) || account;
-    const selectedGroups = latestAccount.selectedGroups || [];
-    const shouldForward = latestAccount.forwardingEnabled !== false && selectedGroups.length > 0;
+    const requestedGroups = latestAccount.selectedGroups || [];
+    const shouldForward = latestAccount.forwardingEnabled !== false && requestedGroups.length > 0;
+    const groupCheck = shouldForward ? await getUnlockedGroups(connection.sock, requestedGroups) : { unlocked: [], skipped: [] };
+    const selectedGroups = groupCheck.unlocked;
+    const initiallySkipped = groupCheck.skipped.length;
     const entry = connection;
 
     if (shouldForward && entry.forwardingStatus?.state === "forwarding") {
@@ -1673,8 +1709,8 @@ app.post(
     if (shouldForward) {
       entry.forwardingStatus = {
         state: "forwarding", current: 0, total: selectedGroups.length,
-        attempting: 0, startedAt: Date.now(), etaSeconds: selectedGroups.length * 30,
-        message: `Posting status, then forwarding to 0/${selectedGroups.length} groups`
+        attempting: 0, skipped: initiallySkipped, startedAt: Date.now(), etaSeconds: selectedGroups.length * 30,
+        message: `Posting status, then forwarding to 0/${selectedGroups.length} unlocked groups`
       };
     }
 
@@ -1698,15 +1734,19 @@ app.post(
 
     console.log(`Text Status posted for ${account.phone} to ${recipients.length} contacts.`);
 
-    if (!shouldForward) {
+    if (!shouldForward || selectedGroups.length === 0) {
       const reason = latestAccount.forwardingEnabled === false
         ? "Forwarding is OFF, so it was not sent to group statuses."
-        : "No groups are selected, so there were no group statuses to forward to.";
+        : requestedGroups.length === 0
+          ? "No groups are selected, so there were no group statuses to forward to."
+          : `All ${initiallySkipped} selected groups are locked/admin-only and were skipped.`;
+      if (shouldForward) entry.forwardingStatus = { state: "forwarded", current: 0, total: 0, attempting: 0, skipped: initiallySkipped, startedAt: Date.now(), etaSeconds: 0, message: `Forwarded 0/0 unlocked groups; skipped ${initiallySkipped} locked` };
       return res.json({ success: true, message: `Your text Status was posted. ${reason}` });
     }
 
     let successCount = 0;
     let failureCount = 0;
+    let skippedLocked = initiallySkipped;
     for (let i = 0; i < selectedGroups.length; i++) {
       const groupId = selectedGroups[i];
       entry.forwardingStatus = {
@@ -1720,29 +1760,34 @@ app.post(
         successCount++;
         console.log(`Text Status forwarded successfully to selected group ${groupId} (${successCount}/${selectedGroups.length}).`);
       } catch (error) {
-        failureCount++;
-        console.error(`Text Status forwarding failed for ${groupId}:`, error?.message || error);
+        if (isLockedGroupError(error)) {
+          skippedLocked++;
+          console.log(`Skipping locked/restricted group ${groupId}: ${error?.message || error}`);
+        } else {
+          failureCount++;
+          console.error(`Text Status forwarding failed for ${groupId}:`, error?.message || error);
+        }
       }
       entry.forwardingStatus = {
         state: "forwarding", current: successCount, total: selectedGroups.length,
-        attempting: i + 1, startedAt: entry.forwardingStatus.startedAt,
-        etaSeconds: selectedGroups.length * 30,
-        message: `Forwarded ${successCount}/${selectedGroups.length}; processed ${i + 1}/${selectedGroups.length}`
+        attempting: i + 1, skipped: skippedLocked, startedAt: entry.forwardingStatus.startedAt,
+        etaSeconds: Math.max(0, (selectedGroups.length - i - 1) * 30),
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processed ${i + 1}/${selectedGroups.length}; skipped ${skippedLocked} locked`
       };
     }
 
     const state = successCount === selectedGroups.length ? "forwarded" : successCount > 0 ? "partial" : "failed";
     entry.forwardingStatus = {
       state, current: successCount, total: selectedGroups.length,
-      attempting: selectedGroups.length, startedAt: entry.forwardingStatus.startedAt,
+      attempting: selectedGroups.length, skipped: skippedLocked, startedAt: entry.forwardingStatus.startedAt,
       etaSeconds: 0,
-      message: `Forwarded ${successCount}/${selectedGroups.length} groups; ${failureCount} failed`
+      message: `Forwarded ${successCount}/${selectedGroups.length} unlocked groups; skipped ${skippedLocked} locked; ${failureCount} failed`
     };
     return res.json({
       success: true,
       posted: true,
-      forwarding: { enabled: true, successful: successCount, failed: failureCount, total: selectedGroups.length },
-      message: `Your text Status was posted. Forwarded to ${successCount}/${selectedGroups.length} selected group statuses${failureCount ? `; ${failureCount} failed` : ""}.`
+      forwarding: { enabled: true, successful: successCount, failed: failureCount, skippedLocked, total: selectedGroups.length, selectedTotal: requestedGroups.length },
+      message: `Your text Status was posted. Forwarded to ${successCount}/${selectedGroups.length} unlocked group statuses; skipped ${skippedLocked} locked${failureCount ? `; ${failureCount} failed` : ""}.`
     });
   }
 );

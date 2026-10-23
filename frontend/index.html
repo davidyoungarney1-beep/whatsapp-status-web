@@ -1247,7 +1247,9 @@ if(status.startedAt && Number(status.etaSeconds)>0){
   else { etaText=" • finishing soon"; }
 }
 const processing=status.attempting?` (processing ${status.attempting}/${total})`:"";
-displayText=total?`Forwarded ${current}/${total}${processing}${etaText}`:"Forwarding...";
+const skipped=Number(status.skipped||0);
+const skippedText=skipped?` • skipped ${skipped} locked`:"";
+displayText=total?`Forwarded ${current}/${total}${processing}${etaText}${skippedText}`:`Forwarding...${skippedText}`;
 
 }
 
@@ -1257,10 +1259,9 @@ else if(state==="forwarded"){
 className="forwarded";
 
 
-displayText=
-total
-?`Forwarded ${current}/${total}`
-:"Forwarded";
+displayText=total
+?`Forwarded ${current}/${total}${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`
+:`Forwarded${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`;
 
 }
 
@@ -1270,10 +1271,9 @@ else if(state==="partial"){
 className="partial";
 
 
-displayText=
-total
-?`Forwarded ${current}/${total}`
-:"Partially forwarded";
+displayText=total
+?`Forwarded ${current}/${total}${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`
+:`Partially forwarded${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`;
 
 }
 
