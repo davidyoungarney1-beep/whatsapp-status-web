@@ -110,6 +110,11 @@ margin-top:15px;
 border-radius:9px
 }
 
+.qr-panel{display:none;text-align:center;background:#eefaf7;padding:18px;margin-top:15px;border-radius:9px}
+.qr-code{display:flex;justify-content:center;align-items:center;min-height:250px;margin:14px auto;background:white;padding:10px;border-radius:8px;max-width:270px}
+.qr-code img,.qr-code canvas{max-width:100%;height:auto}
+.qr-panel small{display:block;line-height:1.6;margin:10px 0}
+
 .code{
 font-size:28px;
 font-weight:bold;
@@ -449,6 +454,9 @@ Forward your WhatsApp Status to selected groups.
 
 <h2>Connect WhatsApp</h2>
 
+<p>Choose either method to link your WhatsApp account.</p>
+
+<label for="phone">Phone number (for pairing-code method)</label>
 <input
 id="phone"
 type="text"
@@ -456,11 +464,21 @@ placeholder="2348012345678"
 >
 
 <button onclick="connect()">
-Connect WhatsApp
+Use Pairing Code
+</button>
+
+<button class="gray" onclick="connectByQr()">
+Scan QR Code Instead
 </button>
 
 <div id="msg"></div>
 
+<div id="qr-panel" class="qr-panel">
+<strong>Scan this code with WhatsApp</strong>
+<div id="qrcode" class="qr-code"></div>
+<small id="qr-instructions">Open WhatsApp → Linked devices → Link a device, then scan this QR code.</small>
+<button class="gray" onclick="hideQr()">Hide QR Code</button>
+</div>
 
 <div id="pair" class="pair">
 
@@ -530,8 +548,7 @@ is forwarded to the groups you choose.
 <ol>
 
 <li>
-Enter your WhatsApp number and click
-<strong>Connect WhatsApp</strong>.
+Choose either <strong>Scan QR Code Instead</strong> and scan the code with WhatsApp, or enter your number and click <strong>Use Pairing Code</strong>.
 </li>
 
 <li>
@@ -783,6 +800,7 @@ onclick="openHelp()"
 
 
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 
 
@@ -895,6 +913,58 @@ e.message,
 
 }
 
+}
+
+
+async function connectByQr(){
+  const panel=document.getElementById("qr-panel");
+  const qrBox=document.getElementById("qrcode");
+  panel.style.display="block";
+  qrBox.innerHTML="";
+  document.getElementById("qr-instructions").textContent="Preparing a secure, temporary QR code...";
+  message("Preparing QR code...", "success");
+  let accountId=null;
+  let lastQr=null;
+  try{
+    const r=await fetch(API+"/api/accounts/connect",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({method:"qr"})
+    });
+    const d=await r.json();
+    if(!r.ok) throw Error(d.error||"Could not start QR connection");
+    accountId=d.account?.id;
+    if(!accountId) throw Error("The server did not return an account ID.");
+    loadAccounts();
+    for(let i=0;i<120;i++){
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      const statusResponse=await fetch(API+"/api/accounts/"+encodeURIComponent(accountId)+"/qr");
+      const status=await statusResponse.json();
+      if(!statusResponse.ok) throw Error(status.error||"Could not check QR connection");
+      if(status.connected){
+        panel.style.display="none";
+        message("WhatsApp connected successfully.","success");
+        await loadAccounts();
+        return;
+      }
+      if(status.qr && status.qr!==lastQr){
+        if(typeof QRCode==="undefined") throw Error("The QR display library did not load. Refresh the page and try again.");
+        lastQr=status.qr;
+        qrBox.innerHTML="";
+        new QRCode(qrBox,{text:status.qr,width:240,height:240,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
+        document.getElementById("qr-instructions").textContent="On your phone: WhatsApp → Linked devices → Link a device, then scan this code. Keep this page open.";
+        message("QR code ready. Scan it with WhatsApp.","success");
+      }
+    }
+    throw Error("QR connection timed out. Try again to generate a fresh code.");
+  }catch(e){
+    message(e.message,"error");
+    loadAccounts();
+  }
+}
+
+function hideQr(){
+  document.getElementById("qr-panel").style.display="none";
 }
 
 

@@ -327,6 +327,8 @@ function accountPublic(account) {
       !!conn?.connected,
     pairingCode:
       conn?.pairingCode || null,
+    qrAvailable:
+      !!conn?.qr,
     forwardingStatus:
       conn?.forwardingStatus || {
         state: "idle",
@@ -725,6 +727,7 @@ async function connectWhatsApp(
     registered: Boolean(state.creds.registered),
     pairingCode: null,
     pairingRequested: false,
+    qr: null,
     forwardingStatus: {
       state: "idle",
       current: 0,
@@ -760,8 +763,14 @@ async function connectWhatsApp(
     async update => {
       const {
         connection,
-        lastDisconnect
+        lastDisconnect,
+        qr
       } = update;
+
+      if (qr) {
+        entry.qr = qr;
+        console.log(`📷 QR code ready for ${account.id}`);
+      }
 
       console.log(
         `🔄 ${account.id} connection:`,
@@ -842,13 +851,25 @@ async function connectWhatsApp(
       if (connection === "open") {
         entry.connected = true;
         entry.registered = true;
+        entry.qr = null;
 
-        updateAccount(
-          account.id,
-          {
+        const linkedPhone = String(sock.user?.id || "")
+          .split("@")[0]
+          .split(":")[0];
+        if (String(account.phone || "").startsWith("QR pending ") && /^\d{8,15}$/.test(linkedPhone)) {
+          account.phone = linkedPhone;
+          updateAccount(account.id, {
+            phone: linkedPhone,
             connected: true
-          }
-        );
+          });
+        } else {
+          updateAccount(
+            account.id,
+            {
+              connected: true
+            }
+          );
+        }
 
         console.log(
           `✅ WhatsApp Connected: ${account.phone}`
@@ -1030,6 +1051,29 @@ app.post(
   "/api/accounts/connect",
   async (req, res) => {
     try {
+      if (req.body?.method === "qr") {
+        const account = {
+          id: "account_" + Date.now() + "_qr",
+          phone: "QR pending " + Date.now(),
+          createdAt: new Date().toISOString(),
+          forwardingEnabled: true,
+          selectedGroups: [],
+          connected: false
+        };
+        saveAccounts([...readAccounts(), account]);
+        try {
+          await connectWhatsApp(account, null);
+        } catch (error) {
+          saveAccounts(readAccounts().filter(item => item.id !== account.id));
+          throw error;
+        }
+        return res.status(202).json({
+          success: true,
+          account: accountPublic(account),
+          message: "Waiting for WhatsApp to provide a QR code."
+        });
+      }
+
       const phone =
         normalizePhone(
           req.body?.phone
@@ -1247,6 +1291,26 @@ app.get(
     });
   }
 );
+
+
+/*
+|--------------------------------------------------------------------------
+| QR CONNECTION STATUS
+|--------------------------------------------------------------------------
+*/
+app.get("/api/accounts/:accountId/qr", (req, res) => {
+  const account = readAccounts().find(item => item.id === req.params.accountId);
+  if (!account) {
+    return res.status(404).json({ success: false, error: "Account not found" });
+  }
+  const connection = connections.get(account.id);
+  return res.json({
+    success: true,
+    connected: !!connection?.connected,
+    qr: connection?.qr || null,
+    phone: account.phone
+  });
+});
 
 
 /*
