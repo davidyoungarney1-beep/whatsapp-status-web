@@ -25,8 +25,15 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
-// Serve the current frontend from Render too, so the fixed QR UI is available
-// even if the separate workers.dev static deployment has not refreshed.
+// Add the shared Add WhatsApp Group / Join All Groups panel without replacing existing frontend controls.
+app.get("/", (req,res,next) => {
+ try {
+  let html=fs.readFileSync(path.join(process.cwd(),"frontend","index.html"),"utf8");
+  const panel = '<section id="shared-join-groups" style="max-width:900px;margin:22px auto;padding:18px;border:1px solid #d7e4df;border-radius:14px;background:#fff;color:#173d31"><h2>Add WhatsApp Group / Join Groups</h2><p>Add invite links to the shared library. Links added here and links published by Save Groups are available to all users.</p><label for="sj-account"><b>WhatsApp account</b></label><select id="sj-account" style="width:100%;padding:10px;margin:6px 0 12px"></select><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="sj-link" type="url" placeholder="Paste WhatsApp group invite link" style="flex:1;min-width:220px;padding:11px"><input id="sj-name" maxlength="100" placeholder="Group name (optional)" style="flex:1;min-width:140px;padding:11px"><button id="sj-add" onclick="sjAdd()">Add WhatsApp Group</button></div><div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap"><button onclick="sjJoinAll()">Join All Groups</button><button class="gray" onclick="sjLoad()">Refresh Shared Groups</button><b id="sj-progress" role="status"></b></div><div id="sj-list">Loading shared groups...</div></section><script>(function(){var api="https://whatsapp-status-web.onrender.com";function el(id){return document.getElementById(id)}function esc(v){return String(v||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll("\"","&quot;").replaceAll("'","&#39;")}window.sjAccounts=async function(){try{var r=await fetch(api+"/api/accounts"),d=await r.json(),s=el("sj-account"),old=s.value;s.innerHTML=(d.accounts||[]).map(function(a){return "<option value=\""+esc(a.id)+"\">"+esc(a.phone||a.id)+(a.connected?" — Connected":" — Disconnected")+"</option>"}).join("");if(old)s.value=old;if(!s.options.length)s.innerHTML="<option value=\"\">No accounts</option>"}catch(e){el("sj-account").innerHTML="<option>Could not load accounts</option>"}};window.sjAdd=async function(){var b=el("sj-add");b.disabled=true;try{var r=await fetch(api+"/api/join-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({link:el("sj-link").value,name:el("sj-name").value})}),d=await r.json();if(!r.ok||!d.success)throw Error(d.error||"Could not add group");el("sj-link").value="";el("sj-name").value="";el("sj-progress").textContent=d.message;await sjLoad()}catch(e){el("sj-progress").textContent=e.message}finally{b.disabled=false}};window.sjLoad=async function(){try{var r=await fetch(api+"/api/join-groups"),d=await r.json();if(!r.ok||!d.success)throw Error(d.error||"Could not load groups");var gs=d.groups||[];el("sj-list").innerHTML=gs.length?gs.map(function(g){return "<div style=\"border:1px solid #e0e9e5;border-radius:8px;padding:10px;margin:7px 0;display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap\"><span><b>"+esc(g.name)+"</b><br><small>"+esc(g.link)+"</small></span><button onclick=\"sjJoinOne('"+esc(g.code||g.id)+"')\">Join</button></div>"}).join(""):"<p>No shared links yet. Add a group above or use Save Groups to publish invite links.</p>"}catch(e){el("sj-list").textContent=e.message}};window.sjJoinOne=async function(code){var id=el("sj-account").value;if(!id){el("sj-progress").textContent="Connect a WhatsApp account first";return}el("sj-progress").textContent="Trying to join...";try{var r=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/join-groups/"+encodeURIComponent(code)+"/join",{method:"POST"}),d=await r.json();if(!r.ok||!d.success)throw Error(d.result&&d.result.message||d.error||"Join failed");el("sj-progress").textContent=d.result.message}catch(e){el("sj-progress").textContent=e.message}};window.sjJoinAll=async function(){var id=el("sj-account").value;if(!id){el("sj-progress").textContent="Connect a WhatsApp account first";return}try{var r=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/join-groups/join-all",{method:"POST"}),d=await r.json();if(!r.ok||!d.success)throw Error(d.error||"Could not start");async function poll(){var q=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/join-groups/progress"),z=await q.json(),j=z.progress||{};el("sj-progress").textContent=j.message||"Working...";if(j.state==="running")setTimeout(poll,1000)}poll()}catch(e){el("sj-progress").textContent=e.message}};document.addEventListener("DOMContentLoaded",function(){sjAccounts();sjLoad()})})();</script>';
+  html=html.replace("</body>",panel+"</body>");
+  res.type("html").send(html);
+ } catch(e) { next(e); }
+});
 app.use(express.static(path.join(process.cwd(), "frontend")));
 
 const PORT = process.env.PORT || 3000;
@@ -68,7 +75,22 @@ const pairingWaiters = new Map();
 const reconnecting = new Set();
 const directStatusEchoes = new Map();
 
+
 let accountsCache = [];
+const joinAllJobs = new Map();
+function parseWhatsAppInvite(value) {
+  const match = String(value || "").trim().match(/(?:https?:\/\/)?(?:www\.)?chat\.whatsapp\.com\/([A-Za-z0-9_-]+)/i);
+  return match ? { code: match[1], link: "https://chat.whatsapp.com/" + match[1] } : null;
+}
+async function saveSharedJoinGroup(item) {
+  const collection = mongoDb.collection("join_groups");
+  await collection.updateOne({ _id: item.code }, { $setOnInsert: { _id: item.code, ...item, addedAt: new Date().toISOString() } }, { upsert: true });
+  return collection.findOne({ _id: item.code });
+}
+async function listSharedJoinGroups() {
+  return mongoDb.collection("join_groups").find({}).sort({ addedAt: -1 }).toArray();
+}
+
 
 function readAccounts() {
   return accountsCache;
@@ -1473,6 +1495,53 @@ app.get(
 
 app.delete("/api/accounts/:accountId", async (req,res) => { const id=req.params.accountId; try { const accounts=readAccounts(); const account=accounts.find(a=>a.id===id); if(!account) return res.status(404).json({success:false,error:"Account not found"}); try { await connections.get(id)?.sock?.logout(); } catch {} connections.delete(id); pairingWaiters.delete(id); reconnecting.delete(id); await mongoDb.collection("whatsapp_auth_creds").deleteMany({accountId:id}); await mongoDb.collection("whatsapp_auth_keys").deleteMany({accountId:id}); saveAccounts(accounts.filter(a=>a.id!==id)); res.json({success:true,message:"Account removed successfully"}); } catch(error) { console.error("â Remove account error:",error); res.status(500).json({success:false,error:"Failed to remove account"}); } });
 
+
+/* SHARED ADD GROUP / JOIN GROUPS */
+app.get("/api/join-groups", async (req,res) => {
+ try { const groups=await listSharedJoinGroups(); res.json({success:true,groups:groups.map(g=>({id:g.code||g._id,code:g.code||g._id,link:g.link,name:g.name||"WhatsApp Group"}))}); }
+ catch(e){res.status(500).json({success:false,error:e.message||"Could not load shared groups"});}
+});
+app.post("/api/join-groups", async (req,res) => {
+ try {
+  const parsed=parseWhatsAppInvite(req.body?.link||req.body?.url);
+  if(!parsed)return res.status(400).json({success:false,error:"Paste a valid https://chat.whatsapp.com/ invite link."});
+  const group=await saveSharedJoinGroup({...parsed,name:String(req.body?.name||"WhatsApp Group").trim().slice(0,100),source:"user"});
+  res.json({success:true,group:{id:group.code,code:group.code,link:group.link,name:group.name},message:"Added to the shared library for all users."});
+ } catch(e){res.status(500).json({success:false,error:e.message||"Could not save invite link"});}
+});
+async function joinOneSharedGroup(accountId,code) {
+ const account=readAccounts().find(a=>a.id===accountId); if(!account)return {code,status:"failed",message:"Account not found"};
+ const conn=connections.get(accountId); if(!conn?.connected||!conn?.sock)return {code,status:"failed",message:"Connect this WhatsApp account first"};
+ try {
+  const group=await mongoDb.collection("join_groups").findOne({_id:code}); if(!group)return {code,status:"failed",message:"Invite link not found"};
+  const sock=conn.sock; if(typeof sock.groupAcceptInvite!=="function")return {code,status:"failed",message:"Joining by invite link is not supported by this WhatsApp library version"};
+  const result=await sock.groupAcceptInvite(code);
+  return result?{code,status:"joined",message:"Joined successfully"}:{code,status:"failed",message:"WhatsApp did not confirm the join"};
+ } catch(e) {
+  const msg=String(e?.message||e), low=msg.toLowerCase();
+  const status=/already.*(participant|member)|already.*in group/.test(low)?"already_joined":/expired|invalid.*invite|not.?found|approval|request.*join/.test(low)?"skipped":"failed";
+  return {code,status,message:status==="skipped"?"Invite is invalid, expired, or requires approval":msg.slice(0,200)};
+ }
+}
+app.post("/api/accounts/:accountId/join-groups/:code/join",async(req,res)=>{
+ const result=await joinOneSharedGroup(req.params.accountId,req.params.code); const ok=["joined","already_joined"].includes(result.status);
+ res.status(ok?200:400).json({success:ok,result});
+});
+app.post("/api/accounts/:accountId/join-groups/join-all",async(req,res)=>{
+ const id=req.params.accountId, account=readAccounts().find(a=>a.id===id), conn=connections.get(id);
+ if(!account)return res.status(404).json({success:false,error:"Account not found"});
+ if(!conn?.connected||!conn?.sock)return res.status(400).json({success:false,error:"Connect this WhatsApp account first"});
+ const old=joinAllJobs.get(id); if(old?.state==="running")return res.json({success:true,progress:old});
+ const groups=await listSharedJoinGroups(), job={state:"running",current:0,total:groups.length,joined:0,alreadyJoined:0,skipped:0,failed:0,message:"Starting"};
+ joinAllJobs.set(id,job);
+ (async()=>{for(const g of groups){job.current++;job.message="Joining Groups "+job.current+"/"+job.total+": "+(g.name||"WhatsApp Group");
+  const r=await joinOneSharedGroup(id,g.code||g._id); if(r.status==="joined")job.joined++;else if(r.status==="already_joined")job.alreadyJoined++;else if(r.status==="skipped")job.skipped++;else job.failed++;
+  job.lastResult={...r,name:g.name||"WhatsApp Group"}; await new Promise(resolve=>setTimeout(resolve,1800));
+ }job.state="completed";job.message="Finished: "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";})().catch(e=>{job.state="completed";job.message="Queue stopped: "+String(e?.message||e);});
+ res.json({success:true,message:"Join All Groups started",progress:job});
+});
+app.get("/api/accounts/:accountId/join-groups/progress",(req,res)=>res.json({success:true,progress:joinAllJobs.get(req.params.accountId)||{state:"idle",message:"No Join All Groups task is running"}}));
+
 /*
 |--------------------------------------------------------------------------
 | GET GROUPS
@@ -1576,7 +1645,7 @@ app.get(
 
 app.post(
   "/api/accounts/:accountId/groups",
-  (req, res) => {
+  async (req, res) => {
     try {
       const accountId =
         req.params.accountId;
@@ -1621,16 +1690,24 @@ app.post(
         };
       }
 
-      saveAccounts(
-        accounts
-      );
-
-      res.json({
-        success: true,
-
-        account:
-          accountPublic(account)
-      });
+      saveAccounts(accounts);
+      let publishedToSharedLibrary = 0;
+      const connection = connections.get(accountId);
+      if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
+        try {
+          const metadata = await connection.sock.groupFetchAllParticipating();
+          for (const groupId of account.selectedGroups) {
+            try {
+              const code = await connection.sock.groupInviteCode(groupId);
+              if (!code) continue;
+              const group = metadata?.[groupId];
+              await saveSharedJoinGroup({ code, link: "https://chat.whatsapp.com/" + code, name: group?.subject || group?.name || "WhatsApp Group", source: "saved-group" });
+              publishedToSharedLibrary++;
+            } catch (e) { console.warn("Could not publish selected group invite:", e?.message || e); }
+          }
+        } catch (e) { console.warn("Could not publish selected groups:", e?.message || e); }
+      }
+      res.json({ success: true, publishedToSharedLibrary, account: accountPublic(account) });
 
     } catch (error) {
       res.status(500).json({
