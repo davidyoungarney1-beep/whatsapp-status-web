@@ -66,6 +66,7 @@ const logger = pino({ level: "silent" });
 const connections = new Map();
 const pairingWaiters = new Map();
 const reconnecting = new Set();
+const directStatusEchoes = new Map();
 
 let accountsCache = [];
 
@@ -417,6 +418,22 @@ async function sendTextStatusWithPreview(sock, jid, text) {
     },
     {}
   );
+}
+
+
+function rememberDirectStatusEcho(accountId, sentMessage, text) {
+  const keyId = sentMessage?.key?.id;
+  if (!keyId) return;
+  directStatusEchoes.set(accountId, { keyId, text, expiresAt: Date.now() + 2 * 60 * 1000 });
+}
+
+function consumeDirectStatusEcho(accountId, message) {
+  const saved = directStatusEchoes.get(accountId);
+  if (!saved) return false;
+  if (Date.now() > saved.expiresAt) { directStatusEchoes.delete(accountId); return false; }
+  if (message?.key?.id !== saved.keyId) return false;
+  directStatusEchoes.delete(accountId);
+  return true;
 }
 
 
@@ -1067,6 +1084,11 @@ async function connectWhatsApp(
             continue;
           }
 
+          if (consumeDirectStatusEcho(account.id, message)) {
+            console.log(`Skipping already-forwarded direct Status echo for ${account.phone}.`);
+            continue;
+          }
+
           await forwardStatus(
             account,
             sock,
@@ -1659,11 +1681,12 @@ app.post(
     try {
       // WhatsApp generates a link preview when the link and metadata are supported.
       // Text-only payload by design: no pictures or videos can be posted here.
-      await connection.sock.sendMessage(
+      const sentStatus = await connection.sock.sendMessage(
         "status@broadcast",
         { text: statusText, linkPreview: true },
         { statusJidList: recipients, broadcast: true }
       );
+      rememberDirectStatusEcho(account.id, sentStatus, statusText);
     } catch (error) {
       if (shouldForward) entry.forwardingStatus = {
         state: "failed", current: 0, total: selectedGroups.length,
