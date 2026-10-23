@@ -1,0 +1,10 @@
+[build]
+  publish = "frontend"
+
+# Proxy the whole site to the live Node.js app on Render. This avoids
+# serving a stale static copy that misses server-injected interface features.
+[[redirects]]
+  from = "/*"
+  to = "https://whatsapp-status-web.onrender.com/:splat"
+  status = 200
+  force = true
