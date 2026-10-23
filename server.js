@@ -1717,10 +1717,12 @@ app.post(
     try {
       // WhatsApp generates a link preview when the link and metadata are supported.
       // Text-only payload by design: no pictures or videos can be posted here.
+      // Publish to the account's own WhatsApp Status first. `statusJidList`
+      // is the audience list; do not set `broadcast: true` for a status update.
       const sentStatus = await connection.sock.sendMessage(
         "status@broadcast",
         { text: statusText, linkPreview: true },
-        { statusJidList: recipients, broadcast: true }
+        { statusJidList: recipients }
       );
       rememberDirectStatusEcho(account.id, sentStatus, statusText);
     } catch (error) {
