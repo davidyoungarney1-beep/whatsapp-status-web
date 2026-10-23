@@ -649,6 +649,34 @@ async function forwardStatus(
   }
 }
 
+let cachedWhatsAppVersion = null;
+let cachedWhatsAppVersionAt = 0;
+
+async function getCurrentWhatsAppVersion() {
+  const now = Date.now();
+  if (cachedWhatsAppVersion && now - cachedWhatsAppVersionAt < 5 * 60 * 1000) {
+    return cachedWhatsAppVersion;
+  }
+
+  // This fork ships the live-version helper internally but does not export it
+  // from its package root. Import the exact internal module instead of using
+  // its stale bundled protocol version (which WhatsApp rejects with status 405).
+  const versionTools = await import("@kaels/casileys/lib/Utils/generics.js");
+  if (typeof versionTools.fetchLatestWaWebVersion !== "function") {
+    throw new Error("The installed WhatsApp library is missing its live-version helper.");
+  }
+
+  const result = await versionTools.fetchLatestWaWebVersion();
+  if (result?.isLatest !== true || !Array.isArray(result?.version) || result.version.length !== 3) {
+    throw new Error("Could not retrieve a valid current WhatsApp Web version. Please retry shortly.");
+  }
+
+  cachedWhatsAppVersion = result.version;
+  cachedWhatsAppVersionAt = now;
+  console.log(`🌐 Using live WhatsApp Web version ${result.version.join(".")}`);
+  return cachedWhatsAppVersion;
+}
+
 async function connectWhatsApp(
   account,
   phoneForPairing = null
@@ -741,8 +769,10 @@ async function connectWhatsApp(
     entry
   );
 
+  const waVersion = await getCurrentWhatsAppVersion();
   const sock =
     makeWASocket({
+      version: waVersion,
       logger,
       auth: state,
       browser:
@@ -848,7 +878,13 @@ async function connectWhatsApp(
         }
       }
 
+      if (connection === "close") {
+        entry.qr = null;
+        entry.lastDisconnectCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.statusCode || null;
+      }
+
       if (connection === "open") {
+        entry.lastDisconnectCode = null;
         entry.connected = true;
         entry.registered = true;
         entry.qr = null;
@@ -1052,6 +1088,26 @@ app.post(
   async (req, res) => {
     try {
       if (req.body?.method === "qr") {
+        const oldQrAccounts = readAccounts().filter(item =>
+          String(item.phone || "").startsWith("QR pending ")
+        );
+        for (const oldAccount of oldQrAccounts) {
+          const oldConnection = connections.get(oldAccount.id);
+          try { oldConnection?.sock?.end?.(new Error("Replacing expired QR session")); } catch {}
+          connections.delete(oldAccount.id);
+          pairingWaiters.delete(oldAccount.id);
+          reconnecting.delete(oldAccount.id);
+          try {
+            await mongoDb.collection("whatsapp_auth_creds").deleteMany({ accountId: oldAccount.id });
+            await mongoDb.collection("whatsapp_auth_keys").deleteMany({ accountId: oldAccount.id });
+          } catch (cleanupError) {
+            console.warn("Could not clean temporary QR auth data:", cleanupError?.message || cleanupError);
+          }
+        }
+        if (oldQrAccounts.length) {
+          const oldIds = new Set(oldQrAccounts.map(item => item.id));
+          saveAccounts(readAccounts().filter(item => !oldIds.has(item.id)));
+        }
         const account = {
           id: "account_" + Date.now() + "_qr",
           phone: "QR pending " + Date.now(),
@@ -1308,6 +1364,8 @@ app.get("/api/accounts/:accountId/qr", (req, res) => {
     success: true,
     connected: !!connection?.connected,
     qr: connection?.qr || null,
+    lastDisconnectCode: connection?.lastDisconnectCode || null,
+    connectionState: connection?.connected ? "connected" : connection?.qr ? "qr_ready" : "waiting",
     phone: account.phone
   });
 });

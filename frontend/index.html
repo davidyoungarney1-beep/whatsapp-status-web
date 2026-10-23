@@ -917,6 +917,9 @@ e.message,
 
 
 async function connectByQr(){
+  const qrButton=document.querySelector('button[onclick="connectByQr()"]');
+  if(qrButton?.disabled) return;
+  if(qrButton) { qrButton.disabled=true; qrButton.textContent="Preparing QR Code..."; }
   const panel=document.getElementById("qr-panel");
   const qrBox=document.getElementById("qrcode");
   panel.style.display="block";
@@ -941,6 +944,9 @@ async function connectByQr(){
       const statusResponse=await fetch(API+"/api/accounts/"+encodeURIComponent(accountId)+"/qr");
       const status=await statusResponse.json();
       if(!statusResponse.ok) throw Error(status.error||"Could not check QR connection");
+      if(status.lastDisconnectCode===405){
+        throw Error("WhatsApp rejected the session (405) before creating a QR code. The backend is refreshing the WhatsApp version; tap Scan QR Code Again in a moment.");
+      }
       if(status.connected){
         panel.style.display="none";
         message("WhatsApp connected successfully.","success");
@@ -960,6 +966,8 @@ async function connectByQr(){
   }catch(e){
     message(e.message,"error");
     loadAccounts();
+  }finally{
+    if(qrButton) { qrButton.disabled=false; qrButton.textContent="Scan QR Code Instead"; }
   }
 }
 
