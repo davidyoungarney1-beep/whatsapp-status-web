@@ -387,8 +387,8 @@ function isLockedGroupError(error) {
   return /not.?authori[sz]ed|forbidden|admin.?only|group.?locked|group.?restricted|not.?allowed|permission denied|not a participant|not.?participant|status.?not.?allowed/.test(message);
 }
 
-async function sendTextStatusWithPreview(sock, jid, text) {
-  const urlInfo = await getUrlInfo(text, {
+async function sendTextStatusWithPreview(sock, jid, text, preparedUrlInfo) {
+  const urlInfo = preparedUrlInfo ?? await getUrlInfo(text, {
     thumbnailWidth: 192,
     fetchOpts: { timeout: 3000 },
     logger,
@@ -544,6 +544,25 @@ async function forwardStatus(
 
   const text = getText(message);
 
+  // Prepare expensive payload work once per status, not once per destination.
+  // Link previews and media downloads were previously repeated for every group.
+  let preparedUrlInfo = null;
+  let mediaBuffer = null;
+  if (type === "text") {
+    try {
+      preparedUrlInfo = await getUrlInfo(text || "", {
+        thumbnailWidth: 192, fetchOpts: { timeout: 3000 }, logger,
+        uploadImage: sock.waUploadToServer
+      });
+    } catch (error) {
+      console.warn("Link preview preparation failed; forwarding text without cached preview:", error?.message || error);
+    }
+  } else if (["image", "video", "audio", "sticker"].includes(type)) {
+    mediaBuffer = await downloadMediaMessage(message, "buffer", {}, {
+      logger, reuploadRequest: sock.updateMediaMessage
+    });
+  }
+
   let successCount = 0;
   let failureCount = 0;
 
@@ -567,24 +586,12 @@ async function forwardStatus(
     try {
       if (type === "text") {
         await sendTextStatusWithPreview(
-          sock,
-          groupId,
-          text || ""
+          sock, groupId, text || "", preparedUrlInfo
         );
       }
 
       else if (type === "image") {
-        const buffer =
-          await downloadMediaMessage(
-            message,
-            "buffer",
-            {},
-            {
-              logger,
-              reuploadRequest:
-                sock.updateMediaMessage
-            }
-          );
+        const buffer = mediaBuffer;
 
         const msg =
           unwrapMessage(message.message);
@@ -601,17 +608,7 @@ async function forwardStatus(
       }
 
       else if (type === "video") {
-        const buffer =
-          await downloadMediaMessage(
-            message,
-            "buffer",
-            {},
-            {
-              logger,
-              reuploadRequest:
-                sock.updateMediaMessage
-            }
-          );
+        const buffer = mediaBuffer;
 
         const msg =
           unwrapMessage(message.message);
@@ -628,17 +625,7 @@ async function forwardStatus(
       }
 
       else if (type === "audio") {
-        const buffer =
-          await downloadMediaMessage(
-            message,
-            "buffer",
-            {},
-            {
-              logger,
-              reuploadRequest:
-                sock.updateMediaMessage
-            }
-          );
+        const buffer = mediaBuffer;
 
         const msg =
           unwrapMessage(message.message);
@@ -660,17 +647,7 @@ async function forwardStatus(
       }
 
       else if (type === "sticker") {
-        const buffer =
-          await downloadMediaMessage(
-            message,
-            "buffer",
-            {},
-            {
-              logger,
-              reuploadRequest:
-                sock.updateMediaMessage
-            }
-          );
+        const buffer = mediaBuffer;
 
         await sendGroupStatusSticker(
           sock,
@@ -1757,6 +1734,15 @@ app.post(
     let successCount = 0;
     let failureCount = 0;
     let skippedLocked = initiallySkipped;
+    let preparedUrlInfo = null;
+    try {
+      preparedUrlInfo = await getUrlInfo(statusText, {
+        thumbnailWidth: 192, fetchOpts: { timeout: 3000 }, logger,
+        uploadImage: connection.sock.waUploadToServer
+      });
+    } catch (error) {
+      console.warn("Direct Status link preview preparation failed; continuing without cached preview:", error?.message || error);
+    }
     for (let i = 0; i < selectedGroups.length; i++) {
       const groupId = selectedGroups[i];
       entry.forwardingStatus = {
@@ -1766,7 +1752,7 @@ app.post(
         message: `Forwarded ${successCount}/${selectedGroups.length}; processing ${i + 1}/${selectedGroups.length}`
       };
       try {
-        await sendTextStatusWithPreview(connection.sock, groupId, statusText);
+        await sendTextStatusWithPreview(connection.sock, groupId, statusText, preparedUrlInfo);
         successCount++;
         console.log(`Text Status forwarded successfully to selected group ${groupId} (${successCount}/${selectedGroups.length}).`);
       } catch (error) {
