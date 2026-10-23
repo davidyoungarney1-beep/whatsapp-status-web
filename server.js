@@ -1527,18 +1527,61 @@ app.post("/api/accounts/:accountId/join-groups/:code/join",async(req,res)=>{
  const result=await joinOneSharedGroup(req.params.accountId,req.params.code); const ok=["joined","already_joined"].includes(result.status);
  res.status(ok?200:400).json({success:ok,result});
 });
-app.post("/api/accounts/:accountId/join-groups/join-all",async(req,res)=>{
- const id=req.params.accountId, account=readAccounts().find(a=>a.id===id), conn=connections.get(id);
- if(!account)return res.status(404).json({success:false,error:"Account not found"});
- if(!conn?.connected||!conn?.sock)return res.status(400).json({success:false,error:"Connect this WhatsApp account first"});
- const old=joinAllJobs.get(id); if(old?.state==="running")return res.json({success:true,progress:old});
- const groups=await listSharedJoinGroups(), job={state:"running",current:0,total:groups.length,joined:0,alreadyJoined:0,skipped:0,failed:0,message:"Starting"};
+function startJoinAllJob(id) {
+ const account=readAccounts().find(a=>a.id===id), conn=connections.get(id);
+ const old=joinAllJobs.get(id);
+ if(old?.state==="running") return old;
+ if(!account) {
+  const failed={state:"failed",current:0,total:0,joined:0,alreadyJoined:0,skipped:0,failed:1,message:"Account not found"};
+  joinAllJobs.set(id,failed); return failed;
+ }
+ if(!conn?.connected||!conn?.sock) {
+  const failed={state:"failed",current:0,total:0,joined:0,alreadyJoined:0,skipped:0,failed:0,message:"Groups saved, but connect this WhatsApp account before joining shared groups."};
+  joinAllJobs.set(id,failed); return failed;
+ }
+ const job={state:"running",current:0,total:0,joined:0,alreadyJoined:0,skipped:0,failed:0,cancelRequested:false,message:"Preparing shared group invites..."};
  joinAllJobs.set(id,job);
- (async()=>{for(const g of groups){job.current++;job.message="Joining Groups "+job.current+"/"+job.total+": "+(g.name||"WhatsApp Group");
-  const r=await joinOneSharedGroup(id,g.code||g._id); if(r.status==="joined")job.joined++;else if(r.status==="already_joined")job.alreadyJoined++;else if(r.status==="skipped")job.skipped++;else job.failed++;
-  job.lastResult={...r,name:g.name||"WhatsApp Group"}; await new Promise(resolve=>setTimeout(resolve,1800));
- }job.state="completed";job.message="Finished: "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";})().catch(e=>{job.state="completed";job.message="Queue stopped: "+String(e?.message||e);});
+ (async()=>{
+  const groups=await listSharedJoinGroups();
+  job.total=groups.length;
+  if(job.cancelRequested) { job.state="stopped"; job.message="Joining stopped before the first group."; return; }
+  if(!groups.length) { job.state="completed"; job.message="No shared group invite links are available to join."; return; }
+  for(const g of groups) {
+   if(job.cancelRequested) break;
+   job.current++;
+   job.message="Joining Groups "+job.current+"/"+job.total+": "+(g.name||"WhatsApp Group");
+   const result=await joinOneSharedGroup(id,g.code||g._id);
+   if(result.status==="joined")job.joined++;
+   else if(result.status==="already_joined")job.alreadyJoined++;
+   else if(result.status==="skipped")job.skipped++;
+   else job.failed++;
+   job.lastResult={...result,name:g.name||"WhatsApp Group"};
+   if(job.cancelRequested) break;
+   await new Promise(resolve=>setTimeout(resolve,1800));
+  }
+  if(job.cancelRequested) {
+   job.state="stopped";
+   job.message="Stopped at "+job.current+"/"+job.total+" groups. "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";
+  } else {
+   job.state="completed";
+   job.message="Finished: "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";
+  }
+ })().catch(e=>{job.state="failed";job.message="Joining stopped because of an error: "+String(e?.message||e);});
+ return job;
+}
+app.post("/api/accounts/:accountId/join-groups/join-all",async(req,res)=>{
+ const id=req.params.accountId, account=readAccounts().find(a=>a.id===id);
+ if(!account)return res.status(404).json({success:false,error:"Account not found"});
+ const job=startJoinAllJob(id);
+ if(job.state==="failed")return res.status(400).json({success:false,error:job.message,progress:job});
  res.json({success:true,message:"Join All Groups started",progress:job});
+});
+app.post("/api/accounts/:accountId/join-groups/stop",(req,res)=>{
+ const job=joinAllJobs.get(req.params.accountId);
+ if(!job||job.state!=="running")return res.json({success:true,stopped:false,message:"No group-joining task is running."});
+ job.cancelRequested=true;
+ job.message="Stop requested — the current group operation will finish, then no more groups will be joined.";
+ res.json({success:true,stopped:true,message:job.message});
 });
 app.get("/api/accounts/:accountId/join-groups/progress",(req,res)=>res.json({success:true,progress:joinAllJobs.get(req.params.accountId)||{state:"idle",message:"No Join All Groups task is running"}}));
 
@@ -1690,37 +1733,41 @@ app.post(
         };
       }
 
-      // Preserve the original Save Groups behavior: store the selection first.
+      // Keep the original Save Groups behavior, then publish selected-group
+      // invite links and automatically start joining the shared invite library.
       saveAccounts(accounts);
-
-      // Publish invite links separately so invite-code lookups cannot delay or
-      // break the normal Save Groups response.
-      if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
-        setImmediate(() => {
-          (async () => {
-            try {
-              const metadata = await connection.sock.groupFetchAllParticipating();
-              for (const groupId of account.selectedGroups) {
-                try {
-                  const code = await connection.sock.groupInviteCode(groupId);
-                  if (!code) continue;
-                  const group = metadata?.[groupId];
-                  await saveSharedJoinGroup({
-                    code,
-                    link: "https://chat.whatsapp.com/" + code,
-                    name: group?.subject || group?.name || "WhatsApp Group",
-                    source: "saved-group"
-                  });
-                } catch (e) {
-                  console.warn("Could not publish selected group invite:", e?.message || e);
+      setImmediate(() => {
+        (async () => {
+          try {
+            if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
+              try {
+                const metadata = await connection.sock.groupFetchAllParticipating();
+                for (const groupId of account.selectedGroups) {
+                  try {
+                    const code = await connection.sock.groupInviteCode(groupId);
+                    if (!code) continue;
+                    const group = metadata?.[groupId];
+                    await saveSharedJoinGroup({
+                      code,
+                      link: "https://chat.whatsapp.com/" + code,
+                      name: group?.subject || group?.name || "WhatsApp Group",
+                      source: "saved-group"
+                    });
+                  } catch (e) {
+                    console.warn("Could not publish selected group invite:", e?.message || e);
+                  }
                 }
+              } catch (e) {
+                console.warn("Could not publish selected groups:", e?.message || e);
               }
-            } catch (e) {
-              console.warn("Could not publish selected groups:", e?.message || e);
             }
-          })().catch(e => console.warn("Shared group publishing task failed:", e?.message || e));
-        });
-      }
+            const job = startJoinAllJob(accountId);
+            if (job.state === "failed") console.warn("Auto-join after Save Groups:", job.message);
+          } catch (e) {
+            console.warn("Shared group publishing / auto-join task failed:", e?.message || e);
+          }
+        })().catch(e => console.warn("Save Groups background task failed:", e?.message || e));
+      });
 
       res.json({ success: true, account: accountPublic(account) });
 
@@ -1907,112 +1954,4 @@ app.post(
         req.body?.enabled !== false;
 
       const account =
-        updateAccount(
-          accountId,
-          {
-            forwardingEnabled:
-              enabled
-          }
-        );
-
-      if (!account) {
-        return res.status(404).json({
-          success: false,
-          error:
-            "Account not found"
-        });
-      }
-
-      console.log(
-        `ð Forwarding ${
-          enabled
-            ? "ON"
-            : "OFF"
-        } for ${account.phone}`
-      );
-
-      res.json({
-        success: true,
-
-        account:
-          accountPublic(account)
-      });
-
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error:
-          error?.message ||
-          "Failed to update forwarding"
-      });
-    }
-  }
-);
-
-
-/*
-|--------------------------------------------------------------------------
-| START SERVER
-|--------------------------------------------------------------------------
-*/
-
-async function startServer() {
-  try {
-    await initializeMongoDB();
-    await initializeAccounts();
-
-    app.listen(
-      PORT,
-      "0.0.0.0",
-      () => {
-        console.log("");
-        console.log(
-          "======================================"
-        );
-        console.log(
-          "ð WhatsApp Status Web Backend"
-        );
-        console.log(
-          `ð Port: ${PORT}`
-        );
-        console.log(
-          "======================================"
-        );
-        console.log("");
-
-        const accounts =
-          readAccounts();
-
-        console.log(
-          `ð± Saved accounts: ${accounts.length}`
-        );
-
-        /*
-         * Restore saved WhatsApp sessions.
-         */
-        for (const account of accounts) {
-          connectWhatsApp(
-            account,
-            null
-          ).catch(error => {
-            console.error(
-              `â Failed restoring ${account.phone}:`,
-              error?.message ||
-              error
-            );
-          });
-        }
-      }
-    );
-  } catch (error) {
-    console.error(
-      "â Startup initialization failed:",
-      error?.message ||
-      error
-    );
-
-    process.exit(1);
-  }
-}
-
-startServer();
+        u

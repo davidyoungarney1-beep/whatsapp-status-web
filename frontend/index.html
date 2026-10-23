@@ -1676,7 +1676,7 @@ alert(
 selected.length+
 " group"+
 (selected.length===1?"":"s")+
-" saved successfully."
+" saved successfully. Shared invites are being published and automatic joining has started. Check the Add WhatsApp Group / Join Groups panel for progress."
 );
 
 
@@ -1686,6 +1686,7 @@ Selected badges are accurate.
 */
 
 await groups(id);
+if(window.sjWatchAccount) window.sjWatchAccount(id);
 
 
 }catch(e){
@@ -1871,48 +1872,4 @@ if(!confirm(
 
 try{
 
-const r=await fetch(
-API+"/api/accounts/"
-+encodeURIComponent(id),
-{
-method:"DELETE"
-}
-);
-
-
-const d=await r.json();
-
-
-if(!d.success){
-
-throw new Error(
-d.error||"Failed to remove account"
-);
-
-}
-
-
-alert(
-"Account removed successfully"
-);
-
-
-loadAccounts();
-
-
-}catch(e){
-
-alert(
-"Failed to remove account: "+
-e.message
-);
-
-}
-
-}
-
-</script>
-
-</body>
-
-</html>
+con
