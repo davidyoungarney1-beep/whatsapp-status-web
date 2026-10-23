@@ -1692,7 +1692,6 @@ app.post(
 
       saveAccounts(accounts);
       let publishedToSharedLibrary = 0;
-      const connection = connections.get(accountId);
       if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
         try {
           const metadata = await connection.sock.groupFetchAllParticipating();
