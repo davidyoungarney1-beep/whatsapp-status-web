@@ -476,7 +476,7 @@ Scan QR Code Instead
 <div id="qr-panel" class="qr-panel">
 <strong>Scan this code with WhatsApp</strong>
 <div id="qrcode" class="qr-code"></div>
-<small id="qr-instructions">Open WhatsApp → Linked devices → Link a device, then scan this QR code.</small>
+<small id="qr-instructions">Open WhatsApp â Linked devices â Link a device, then scan this QR code.</small>
 <button class="gray" onclick="hideQr()">Hide QR Code</button>
 </div>
 
@@ -491,7 +491,7 @@ Pairing Code
 </div>
 
 <small>
-WhatsApp → Linked Devices → Link a Device → Link with phone number
+WhatsApp â Linked Devices â Link a Device â Link with phone number
 </small>
 
 </div>
@@ -531,7 +531,7 @@ onclick="event.stopPropagation()"
 >
 
 <h2>
-📱 How to Use the WhatsApp Status Forwarder
+ð± How to Use the WhatsApp Status Forwarder
 </h2>
 
 
@@ -556,7 +556,7 @@ A pairing code will appear.
 Enter the code in WhatsApp through:
 <br><br>
 <strong>
-WhatsApp → Linked Devices → Link a Device →
+WhatsApp â Linked Devices â Link a Device â
 Link with phone number
 </strong>
 </li>
@@ -609,13 +609,13 @@ Select the groups where you want your WhatsApp Status to be posted.
 
 
 <h3>
-4. IMPORTANT — Click Save Groups
+4. IMPORTANT â Click Save Groups
 </h3>
 
 <div class="important">
 
 <strong>
-⚠️ Always click "Save Groups" after choosing your groups.
+â ï¸ Always click "Save Groups" after choosing your groups.
 </strong>
 
 <br><br>
@@ -644,7 +644,7 @@ Before posting your WhatsApp Status, go to:
 <br><br>
 
 <strong>
-WhatsApp → Settings → Privacy → Status
+WhatsApp â Settings â Privacy â Status
 </strong>
 
 <br><br>
@@ -712,7 +712,7 @@ The bot was unable to forward the status to the selected groups.
 
 
 <h3>
-🔁 For Every New Status
+ð For Every New Status
 </h3>
 
 <p>
@@ -754,7 +754,7 @@ Wait for it to show <strong>Forwarded</strong>.
 
 <div class="important">
 
-<strong>⚠️ Important:</strong><br><br>
+<strong>â ï¸ Important:</strong><br><br>
 
 Always make sure <strong>Forwarding is ON</strong>,
 your desired groups are selected, and you have clicked
@@ -793,7 +793,7 @@ If the bot fails, contact me on WhatsApp:
 class="help-button"
 onclick="openHelp()"
 >
-📖 How to Use the Bot
+ð How to Use the Bot
 </button>
 
 </footer>
@@ -958,7 +958,7 @@ async function connectByQr(){
         lastQr=status.qr;
         qrBox.innerHTML="";
         new QRCode(qrBox,{text:status.qr,width:240,height:240,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
-        document.getElementById("qr-instructions").textContent="On your phone: WhatsApp → Linked devices → Link a device, then scan this code. Keep this page open.";
+        document.getElementById("qr-instructions").textContent="On your phone: WhatsApp â Linked devices â Link a device, then scan this code. Keep this page open.";
         message("QR code ready. Scan it with WhatsApp.","success");
       }
     }
@@ -1048,8 +1048,8 @@ ${esc(x.phone||"Unknown")}
 <div class="status ${x.connected?"connected":""}">
 
 ${x.connected
-?"● Connected"
-:"○ Disconnected"}
+?"â Connected"
+:"â Disconnected"}
 
 </div>
 
@@ -1074,7 +1074,7 @@ class="danger"
 onclick="removeAccount('${x.id}')"
 title="Remove account"
 >
-✕
+â
 </button>
 
 </div>
@@ -1390,7 +1390,12 @@ Selected: ${selectedCount}
 </span>
 
 </div>
-`+
+
+<div class="group-actions">
+<button class="gray" onclick="selectAllGroups('\${id}', true)">Select All Groups</button>
+<button class="gray" onclick="selectAllGroups('\${id}', false)">Clear Selection</button>
+</div>
++
 
 gs.map(g=>`
 
@@ -1461,6 +1466,12 @@ e.message;
 }
 
 
+
+function selectAllGroups(id, shouldSelect){
+  const boxes=document.querySelectorAll(".cg-"+id);
+  boxes.forEach(box=>{ box.checked=shouldSelect; });
+  updateSelectedCount(id);
+}
 
 function updateSelectedCount(id){
 
