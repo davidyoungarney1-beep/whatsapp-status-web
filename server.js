@@ -25,6 +25,10 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
+// Serve the current frontend from Render too, so the fixed QR UI is available
+// even if the separate workers.dev static deployment has not refreshed.
+app.use(express.static(path.join(process.cwd(), "frontend")));
+
 const PORT = process.env.PORT || 3000;
 
 const mongoClient = new MongoClient(process.env.MONGODB_URI);
