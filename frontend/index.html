@@ -1109,15 +1109,15 @@ Waiting
 <div class="post-mode-panel">
   <b>Choose How to Post</b>
   <div class="mode-options">
-    <button type="button" class="mode-option active" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Link Only)</button>
+    <button type="button" class="mode-option active" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
     <button type="button" class="mode-option" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>
   </div>
   <div id="mode-direct-${x.id}">
-    <label for="link-url-${x.id}"><b>Text or website link</b></label>
-    <textarea id="link-url-${x.id}" rows="4" maxlength="700" placeholder="Write your text status or paste a website link..."></textarea>
+    <label for="link-url-${x.id}"><b>WhatsApp Status text + link</b></label>
+    <textarea id="link-url-${x.id}" rows="4" maxlength="700" placeholder="Write your status text, then include your link too..."></textarea>
     <button type="button" onclick="postLinkStatus('${x.id}')">Post Text to My Status</button>
     <div id="link-result-${x.id}" class="post-result"></div>
-    <small>Direct mode supports plain text or links only. Photos and videos are excluded. WhatsApp may show a link preview when available.</small>
+    <small>Direct mode supports plain text or links only. Photos and videos are excluded. Add text and a link together. A preview is requested and will appear when WhatsApp supports it.</small>
   </div>
   <div id="mode-manual-${x.id}" style="display:none">
     <div class="manual-mode-note"><b>Manual mode:</b> Open WhatsApp on your phone and post your text, photo, or video to your Status as usual. If Forwarding is ON, the bot will forward that status to your selected groups.</div>
@@ -1238,11 +1238,16 @@ if(state==="forwarding"){
 
 className="forwarding";
 
-
-displayText=
-total
-?`Forwarding ${current}/${total}`
-:"Forwarding...";
+let etaText="";
+if(status.startedAt && Number(status.etaSeconds)>0){
+  const elapsed=Math.max(0,Math.floor((Date.now()-Number(status.startedAt))/1000));
+  const left=Math.max(0,Number(status.etaSeconds)-elapsed);
+  if(left>=60){ etaText=` • est. ${Math.ceil(left/60)} min left`; }
+  else if(left>5){ etaText=` • est. ${left} sec left`; }
+  else { etaText=" • finishing soon"; }
+}
+const processing=status.attempting?` (processing ${status.attempting}/${total})`:"";
+displayText=total?`Forwarded ${current}/${total}${processing}${etaText}`:"Forwarding...";
 
 }
 
@@ -1385,7 +1390,7 @@ async function postLinkStatus(id){
   if(button){button.disabled=true;button.textContent="Posting text...";}
   result.style.display="block";
   result.className="post-result";
-  result.textContent="Sending your text to WhatsApp Status...";
+  result.textContent="Posting your text Status, then forwarding to selected groups if Forwarding is ON...";
   try{
     const response=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/post-link-status",{
       method:"POST",
@@ -1395,6 +1400,7 @@ async function postLinkStatus(id){
     const data=await response.json();
     if(!response.ok)throw Error(data.error||"Could not post the text status.");
     result.textContent=data.message||"Text posted to your WhatsApp Status.";
+    if(data.posted && data.forwarding){ result.textContent += " Live progress below shows successful group forwards out of the selected total."; }
     result.className="post-result success";
   }catch(error){
     result.textContent=error.message||"Could not post the text status.";

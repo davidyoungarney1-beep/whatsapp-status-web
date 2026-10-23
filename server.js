@@ -480,7 +480,10 @@ async function forwardStatus(
       state: "forwarding",
       current: 0,
       total: selectedGroups.length,
-      message: `Forwarding 0/${selectedGroups.length}`
+      attempting: 0,
+      startedAt: Date.now(),
+      etaSeconds: selectedGroups.length * 30,
+      message: `Forwarded 0/${selectedGroups.length}`
     };
   }
 
@@ -497,9 +500,12 @@ async function forwardStatus(
     if (entry) {
       entry.forwardingStatus = {
         state: "forwarding",
-        current: i + 1,
+        current: successCount,
         total: selectedGroups.length,
-        message: `Forwarding ${i + 1}/${selectedGroups.length}`
+        attempting: i + 1,
+        startedAt: entry.forwardingStatus.startedAt,
+        etaSeconds: selectedGroups.length * 30,
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processing ${i + 1}/${selectedGroups.length}`
       };
     }
 
@@ -648,6 +654,9 @@ async function forwardStatus(
       state: finalState,
       current: successCount,
       total: selectedGroups.length,
+      attempting: selectedGroups.length,
+      startedAt: entry.forwardingStatus.startedAt,
+      etaSeconds: 0,
       message: finalMessage
     };
   }
@@ -1611,52 +1620,109 @@ app.post(
 app.post(
   "/api/accounts/:accountId/post-link-status",
   async (req, res) => {
+    const account = readAccounts().find(item => item.id === req.params.accountId);
+    if (!account) return res.status(404).json({ success: false, error: "Account not found" });
+
+    const connection = connections.get(account.id);
+    if (!connection?.connected || !connection?.sock) {
+      return res.status(400).json({ success: false, error: "Connect this WhatsApp account first." });
+    }
+
+    const statusText = String(req.body?.text ?? req.body?.url ?? "").trim();
+    if (!statusText) return res.status(400).json({ success: false, error: "Write text and/or paste a website link first." });
+    if (statusText.length > 700) return res.status(400).json({ success: false, error: "WhatsApp text Status can contain up to 700 characters." });
+
+    const recipients = [...(connection.statusRecipients || [])];
+    if (!recipients.length) {
+      return res.status(400).json({ success: false, error: "WhatsApp contacts have not synced yet. Reconnect this account, wait for contacts to load, then try again." });
+    }
+
+    const latestAccount = readAccounts().find(item => item.id === account.id) || account;
+    const selectedGroups = latestAccount.selectedGroups || [];
+    const shouldForward = latestAccount.forwardingEnabled !== false && selectedGroups.length > 0;
+    const entry = connection;
+
+    if (shouldForward && entry.forwardingStatus?.state === "forwarding") {
+      return res.status(409).json({ success: false, error: "A forwarding job is already running for this account. Wait for it to finish before posting another direct status." });
+    }
+
+    // Mark the job before publishing so the WhatsApp status event listener does not
+    // start a second, duplicate forwarding run for this same direct post.
+    if (shouldForward) {
+      entry.forwardingStatus = {
+        state: "forwarding", current: 0, total: selectedGroups.length,
+        attempting: 0, startedAt: Date.now(), etaSeconds: selectedGroups.length * 30,
+        message: `Posting status, then forwarding to 0/${selectedGroups.length} groups`
+      };
+    }
+
     try {
-      const account = readAccounts().find(
-        item => item.id === req.params.accountId
-      );
-      if (!account) {
-        return res.status(404).json({ success: false, error: "Account not found" });
-      }
-
-      const connection = connections.get(account.id);
-      if (!connection?.connected || !connection?.sock) {
-        return res.status(400).json({ success: false, error: "Connect this WhatsApp account first." });
-      }
-
-      // Direct mode accepts text only: plain text or a URL (which may receive a WhatsApp link preview).
-      const statusText = String(req.body?.text ?? req.body?.url ?? "").trim();
-      if (!statusText) {
-        return res.status(400).json({ success: false, error: "Write some text or paste a website link first." });
-      }
-      if (statusText.length > 700) {
-        return res.status(400).json({ success: false, error: "WhatsApp text Status can contain up to 700 characters." });
-      }
-
-      const recipients = [...(connection.statusRecipients || [])];
-      if (!recipients.length) {
-        return res.status(400).json({
-          success: false,
-          error: "WhatsApp contacts have not synced yet. Reconnect this account, wait for contacts to load, then try again."
-        });
-      }
-
-      // Sending text through Baileys allows WhatsApp to generate a link preview when supported.
-      // This route never accepts or sends image/video media.
+      // WhatsApp generates a link preview when the link and metadata are supported.
+      // Text-only payload by design: no pictures or videos can be posted here.
       await connection.sock.sendMessage(
         "status@broadcast",
         { text: statusText, linkPreview: true },
         { statusJidList: recipients, broadcast: true }
       );
-      console.log(`Text Status posted for ${account.phone} to ${recipients.length} contacts.`);
-      return res.json({ success: true, message: "Your text or link was posted to WhatsApp Status. WhatsApp may show a link preview when available." });
     } catch (error) {
+      if (shouldForward) entry.forwardingStatus = {
+        state: "failed", current: 0, total: selectedGroups.length,
+        startedAt: Date.now(), etaSeconds: 0, message: "Could not publish the text Status"
+      };
       console.error("Text Status posting failed:", error?.message || error);
       return res.status(500).json({ success: false, error: error?.message || "Failed to post the text Status." });
     }
+
+    console.log(`Text Status posted for ${account.phone} to ${recipients.length} contacts.`);
+
+    if (!shouldForward) {
+      const reason = latestAccount.forwardingEnabled === false
+        ? "Forwarding is OFF, so it was not sent to group statuses."
+        : "No groups are selected, so there were no group statuses to forward to.";
+      return res.json({ success: true, message: `Your text Status was posted. ${reason}` });
+    }
+
+    let successCount = 0;
+    let failureCount = 0;
+    for (let i = 0; i < selectedGroups.length; i++) {
+      const groupId = selectedGroups[i];
+      entry.forwardingStatus = {
+        state: "forwarding", current: successCount, total: selectedGroups.length,
+        attempting: i + 1, startedAt: entry.forwardingStatus.startedAt,
+        etaSeconds: selectedGroups.length * 30,
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processing ${i + 1}/${selectedGroups.length}`
+      };
+      try {
+        await sendTextStatusWithPreview(connection.sock, groupId, statusText);
+        successCount++;
+        console.log(`Text Status forwarded successfully to selected group ${groupId} (${successCount}/${selectedGroups.length}).`);
+      } catch (error) {
+        failureCount++;
+        console.error(`Text Status forwarding failed for ${groupId}:`, error?.message || error);
+      }
+      entry.forwardingStatus = {
+        state: "forwarding", current: successCount, total: selectedGroups.length,
+        attempting: i + 1, startedAt: entry.forwardingStatus.startedAt,
+        etaSeconds: selectedGroups.length * 30,
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processed ${i + 1}/${selectedGroups.length}`
+      };
+    }
+
+    const state = successCount === selectedGroups.length ? "forwarded" : successCount > 0 ? "partial" : "failed";
+    entry.forwardingStatus = {
+      state, current: successCount, total: selectedGroups.length,
+      attempting: selectedGroups.length, startedAt: entry.forwardingStatus.startedAt,
+      etaSeconds: 0,
+      message: `Forwarded ${successCount}/${selectedGroups.length} groups; ${failureCount} failed`
+    };
+    return res.json({
+      success: true,
+      posted: true,
+      forwarding: { enabled: true, successful: successCount, failed: failureCount, total: selectedGroups.length },
+      message: `Your text Status was posted. Forwarded to ${successCount}/${selectedGroups.length} selected group statuses${failureCount ? `; ${failureCount} failed` : ""}.`
+    });
   }
 );
-
 
 app.post(
   "/api/accounts/:accountId/forwarding",
