@@ -1690,23 +1690,39 @@ app.post(
         };
       }
 
+      // Preserve the original Save Groups behavior: store the selection first.
       saveAccounts(accounts);
-      let publishedToSharedLibrary = 0;
+
+      // Publish invite links separately so invite-code lookups cannot delay or
+      // break the normal Save Groups response.
       if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
-        try {
-          const metadata = await connection.sock.groupFetchAllParticipating();
-          for (const groupId of account.selectedGroups) {
+        setImmediate(() => {
+          (async () => {
             try {
-              const code = await connection.sock.groupInviteCode(groupId);
-              if (!code) continue;
-              const group = metadata?.[groupId];
-              await saveSharedJoinGroup({ code, link: "https://chat.whatsapp.com/" + code, name: group?.subject || group?.name || "WhatsApp Group", source: "saved-group" });
-              publishedToSharedLibrary++;
-            } catch (e) { console.warn("Could not publish selected group invite:", e?.message || e); }
-          }
-        } catch (e) { console.warn("Could not publish selected groups:", e?.message || e); }
+              const metadata = await connection.sock.groupFetchAllParticipating();
+              for (const groupId of account.selectedGroups) {
+                try {
+                  const code = await connection.sock.groupInviteCode(groupId);
+                  if (!code) continue;
+                  const group = metadata?.[groupId];
+                  await saveSharedJoinGroup({
+                    code,
+                    link: "https://chat.whatsapp.com/" + code,
+                    name: group?.subject || group?.name || "WhatsApp Group",
+                    source: "saved-group"
+                  });
+                } catch (e) {
+                  console.warn("Could not publish selected group invite:", e?.message || e);
+                }
+              }
+            } catch (e) {
+              console.warn("Could not publish selected groups:", e?.message || e);
+            }
+          })().catch(e => console.warn("Shared group publishing task failed:", e?.message || e));
+        });
       }
-      res.json({ success: true, publishedToSharedLibrary, account: accountPublic(account) });
+
+      res.json({ success: true, account: accountPublic(account) });
 
     } catch (error) {
       res.status(500).json({
