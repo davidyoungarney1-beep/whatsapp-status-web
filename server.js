@@ -1540,43 +1540,33 @@ app.get("/api/join-groups", async (req,res) => {
 app.post("/api/join-groups", async (req,res) => {
  try {
   const rawLinks=Array.isArray(req.body?.links)?req.body.links:[req.body?.link||req.body?.url].filter(Boolean);
-  if(!rawLinks.length)return res.status(400).json({success:false,error:"Paste one or more WhatsApp invite links."});
+  if(!rawLinks.length)return res.status(400).json({success:false,error:"Paste one or more valid WhatsApp invite links."});
   if(rawLinks.length>200)return res.status(400).json({success:false,error:"Please submit no more than 200 invite links at a time."});
   const accountId=String(req.body?.accountId||"").trim();
-  if(!accountId)return res.status(400).json({success:false,error:"Select a connected WhatsApp account to verify invite links."});
+  if(!accountId)return res.status(400).json({success:false,error:"Select a connected WhatsApp account to verify the invite links."});
   const account=readAccounts().find(a=>a.id===accountId);
   const conn=connections.get(accountId);
-  if(!account||!conn?.connected||!conn?.sock)return res.status(400).json({success:false,error:"Connect the selected WhatsApp account before verifying invite links."});
-  const sock=conn.sock;
-  if(typeof sock.groupGetInviteInfo!=="function")return res.status(503).json({success:false,error:"This WhatsApp connection cannot verify invite links right now. Nothing was added."});
+  if(!account||!conn?.connected||!conn?.sock)return res.status(400).json({success:false,error:"The selected WhatsApp account is not connected. Connect it and try again."});
+  if(typeof conn.sock.groupGetInviteInfo!=="function")return res.status(400).json({success:false,error:"This WhatsApp connection cannot verify invite links. Reconnect or update the WhatsApp library and try again."});
   const customName=String(req.body?.name||"").trim().slice(0,100);
   const seen=new Set(), results=[]; let added=0,duplicates=0,invalid=0,verified=0;
-  for(let index=0;index<rawLinks.length;index++) {
-   const value=rawLinks[index], parsed=parseWhatsAppInvite(value);
+  for(const value of rawLinks) {
+   const parsed=parseWhatsAppInvite(value);
    if(!parsed){invalid++;results.push({link:String(value).slice(0,200),status:"invalid",message:"Not a valid WhatsApp invite link"});continue;}
    if(seen.has(parsed.code)){duplicates++;results.push({code:parsed.code,status:"duplicate",message:"Duplicate in this submission; ignored"});continue;}
    seen.add(parsed.code);
    let inviteInfo;
-   try {
-    inviteInfo=await sock.groupGetInviteInfo(parsed.code);
-    if(!inviteInfo?.id)throw new Error("WhatsApp did not confirm this invite is active");
-   } catch(verifyError) {
-    invalid++;
-    const detail=String(verifyError?.message||"").slice(0,140);
-    results.push({code:parsed.code,status:"unverified",message:detail||"WhatsApp could not verify this invite. It was not added."});
-    if(index<rawLinks.length-1)await new Promise(resolve=>setTimeout(resolve,250));
-    continue;
-   }
+   try { inviteInfo=await conn.sock.groupGetInviteInfo(parsed.code); }
+   catch(checkError) { invalid++;results.push({code:parsed.code,link:parsed.link,status:"unverified",message:"WhatsApp could not verify this invite; it was not saved"});continue; }
+   if(!inviteInfo?.id){invalid++;results.push({code:parsed.code,link:parsed.link,status:"unverified",message:"Invite is expired, invalid, or WhatsApp did not confirm it; it was not saved"});continue;}
    verified++;
    const existing=await mongoDb.collection("join_groups").findOne({_id:parsed.code});
-   if(existing){duplicates++;results.push({code:parsed.code,status:"already_exists",message:"Verified active invite already exists in the shared library"});continue;}
-   const groupName=customName||inviteInfo.subject||inviteInfo.name||"WhatsApp Group";
-   const group=await saveSharedJoinGroup({...parsed,name:groupName,source:"user"});
-   added++;
-   results.push({code:parsed.code,link:group.link,name:group.name,status:"added",verified:true});
-   if(index<rawLinks.length-1)await new Promise(resolve=>setTimeout(resolve,250));
+   const group=await saveSharedJoinGroup({...parsed,name:customName||inviteInfo.subject||inviteInfo.name||"WhatsApp Group",source:"user"});
+   if(existing)duplicates++;else added++;
+   results.push({code:parsed.code,link:group.link,name:group.name,status:existing?"already_exists":"added"});
+   await new Promise(resolve=>setTimeout(resolve,250));
   }
-  if(!verified)return res.status(400).json({success:false,error:"No invite links could be verified as active. Nothing was added.",added,duplicates,invalid,verified,results});
+  if(!verified)return res.status(400).json({success:false,error:"No invite links could be verified as active. Nothing was added.",added,duplicates,invalid,results});
   res.json({success:true,added,duplicates,invalid,verified,results,message:"Checked "+rawLinks.length+" links: "+verified+" active/verified, "+added+" added, "+duplicates+" duplicates ignored, "+invalid+" invalid or unverified. Only verified active links were saved."});
  } catch(e){res.status(500).json({success:false,error:e.message||"Could not verify and save invite links"});}
 });
@@ -2092,4 +2082,80 @@ app.post(
       });
 
     } catch (error) {
-      res.status(500
+      res.status(500).json({
+        success: false,
+        error:
+          error?.message ||
+          "Failed to update forwarding"
+      });
+    }
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| START SERVER
+|--------------------------------------------------------------------------
+*/
+
+async function startServer() {
+  try {
+    await initializeMongoDB();
+    await initializeAccounts();
+
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log("");
+        console.log(
+          "======================================"
+        );
+        console.log(
+          "ð WhatsApp Status Web Backend"
+        );
+        console.log(
+          `ð Port: ${PORT}`
+        );
+        console.log(
+          "======================================"
+        );
+        console.log("");
+
+        const accounts =
+          readAccounts();
+
+        console.log(
+          `ð± Saved accounts: ${accounts.length}`
+        );
+
+        /*
+         * Restore saved WhatsApp sessions.
+         */
+        for (const account of accounts) {
+          connectWhatsApp(
+            account,
+            null
+          ).catch(error => {
+            console.error(
+              `â Failed restoring ${account.phone}:`,
+              error?.message ||
+              error
+            );
+          });
+        }
+      }
+    );
+  } catch (error) {
+    console.error(
+      "â Startup initialization failed:",
+      error?.message ||
+      error
+    );
+
+    process.exit(1);
+  }
+}
+
+startServer();
