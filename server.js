@@ -1786,93 +1786,50 @@ app.post(
   "/api/accounts/:accountId/groups",
   async (req, res) => {
     try {
-      const accountId =
-        req.params.accountId;
-
-      const groupIds =
-        Array.isArray(
-          req.body?.groups
-        )
-          ? req.body.groups
-          : [];
-
-      const accounts =
-        readAccounts();
-
-      const account =
-        accounts.find(
-          a =>
-            a.id ===
-            accountId
-        );
-
-      if (!account) {
-        return res.status(404).json({
-          success: false,
-          error:
-            "Account not found"
-        });
-      }
-
-      account.selectedGroups =
-        groupIds.filter(
-          Boolean
-        );
-
+      const accountId = req.params.accountId;
+      const groupIds = Array.isArray(req.body?.groups) ? [...new Set(req.body.groups.filter(Boolean))] : [];
+      const accounts = readAccounts();
+      const account = accounts.find(a => a.id === accountId);
+      if (!account) return res.status(404).json({ success: false, error: "Account not found" });
+      account.selectedGroups = groupIds;
       const connection = connections.get(accountId);
-      if (connection) {
-        connection.forwardingStatus = {
-          state: "idle",
-          current: 0,
-          total: 0,
-          message: "Waiting"
-        };
-      }
-
-      // Save the forwarding selection and publish selected-group invite links
-      // to the shared library. Joining groups is only done when Join All Groups
-      // is explicitly pressed by the user.
+      if (connection) connection.forwardingStatus = { state: "idle", current: 0, total: 0, message: "Waiting" };
       saveAccounts(accounts);
-      setImmediate(() => {
-        (async () => {
+
+      // Save Groups never joins groups. It saves forwarding selections and only publishes
+      // invite links that WhatsApp confirms are valid. Existing invites are reported as duplicates.
+      let verified = 0, added = 0, duplicates = 0, unverified = 0;
+      const results = [];
+      if (connection?.sock && typeof connection.sock.groupInviteCode === "function" &&
+          typeof connection.sock.groupGetInviteInfo === "function") {
+        let metadata = {};
+        try { metadata = await connection.sock.groupFetchAllParticipating(); }
+        catch (e) { console.warn("Could not fetch participating groups:", e?.message || e); }
+        for (const groupId of groupIds) {
           try {
-            if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
-              try {
-                const metadata = await connection.sock.groupFetchAllParticipating();
-                for (const groupId of account.selectedGroups) {
-                  try {
-                    const code = await connection.sock.groupInviteCode(groupId);
-                    if (!code) continue;
-                    const group = metadata?.[groupId];
-                    await saveSharedJoinGroup({
-                      code,
-                      link: "https://chat.whatsapp.com/" + code,
-                      name: group?.subject || group?.name || "WhatsApp Group",
-                      source: "saved-group"
-                    });
-                  } catch (e) {
-                    console.warn("Could not publish selected group invite:", e?.message || e);
-                  }
-                }
-              } catch (e) {
-                console.warn("Could not publish selected groups:", e?.message || e);
-              }
-            }
+            const code = await connection.sock.groupInviteCode(groupId);
+            if (!code) { unverified++; results.push({ groupId, status: "unverified", message: "WhatsApp did not provide an invite code; not added to the library." }); continue; }
+            let inviteInfo;
+            try { inviteInfo = await connection.sock.groupGetInviteInfo(code); } catch { inviteInfo = null; }
+            if (!inviteInfo?.id) { unverified++; results.push({ groupId, code, status: "unverified", message: "WhatsApp could not verify this invite; not added to the library." }); continue; }
+            verified++;
+            const existing = await mongoDb.collection("join_groups").findOne({ _id: code });
+            const group = metadata?.[groupId];
+            await saveSharedJoinGroup({ code, link: "https://chat.whatsapp.com/" + code,
+              name: group?.subject || group?.name || inviteInfo.subject || inviteInfo.name || "WhatsApp Group", source: "saved-group" });
+            if (existing) { duplicates++; results.push({ groupId, code, status: "duplicate", message: "Invite already exists in the shared library; duplicate ignored." }); }
+            else { added++; results.push({ groupId, code, status: "added", message: "Invite verified by WhatsApp and added to the shared library." }); }
           } catch (e) {
-            console.warn("Shared group publishing task failed:", e?.message || e);
+            unverified++; results.push({ groupId, status: "unverified", message: "Could not verify/publish invite: " + String(e?.message || e).slice(0, 160) });
           }
-        })().catch(e => console.warn("Save Groups background task failed:", e?.message || e));
-      });
-
-      res.json({ success: true, account: accountPublic(account) });
-
+        }
+      } else if (groupIds.length) { unverified = groupIds.length; }
+      const message = !connection?.sock
+        ? "Forwarding selection saved. Connect this WhatsApp account to verify and publish its invite links."
+        : `Saved ${groupIds.length} forwarding group${groupIds.length === 1 ? "" : "s"}. Shared invites: ${added} added, ${duplicates} duplicates ignored, ${unverified} unverified/not added. No groups were joined.`;
+      res.json({ success: true, account: accountPublic(account), verified, added, duplicates, unverified, results, message });
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        error:
-          error?.message ||
-          "Failed to save groups"
-      });
+      res.status(500).json({ success: false, error: error?.message || "Failed to save groups" });
     }
   }
 );
