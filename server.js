@@ -675,9 +675,13 @@ async function forwardStatus(
   let failureCount = 0;
 
   let wasStopped = false;
-  for (let i = 0; i < selectedGroups.length; i++) {
+  // Send two groups concurrently, then wait for both before starting the next batch.
+  // This keeps progress/stop handling bounded while reducing per-group wait time.
+  for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 2) {
     if (entry?.stopForwardingRequested) { wasStopped = true; break; }
-    const groupId = selectedGroups[i];
+    const batchGroups = selectedGroups.slice(batchStart, batchStart + 2);
+    await Promise.all(batchGroups.map(async (groupId, batchOffset) => {
+    const i = batchStart + batchOffset;
 
     console.log(`ð¯ ATTEMPTING GROUP: ${groupId}`);
 
@@ -686,10 +690,10 @@ async function forwardStatus(
         state: "forwarding",
         current: successCount,
         total: selectedGroups.length,
-        attempting: i + 1,
+        attempting: batchStart + batchGroups.length,
         startedAt: entry.forwardingStatus.startedAt,
-        etaSeconds: selectedGroups.length * 30,
-        message: `Forwarded ${successCount}/${selectedGroups.length}; processing ${i + 1}/${selectedGroups.length}`
+        etaSeconds: Math.ceil((selectedGroups.length - batchStart) / 2) * 30,
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 2) + 1}/${Math.ceil(selectedGroups.length / 2)}`
       };
     }
 
@@ -781,6 +785,7 @@ async function forwardStatus(
         console.error(`Failed forwarding to ${groupId}:`, error?.message || error);
       }
     }
+    }));
   }
   if (entry) {
     let finalState = "failed";
