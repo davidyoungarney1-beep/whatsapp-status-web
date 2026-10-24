@@ -804,14 +804,25 @@ function hideQr(){
 
 async function loadAccounts(){
 
+const accountsBox=document.getElementById("accounts");
+let accountLoadTimeout;
+const controller=new AbortController();
+
+accountsBox.innerHTML='<div class="empty">Connecting to the server and loading accounts...</div>';
+
 try{
 
-const r=await fetch(
-API+"/api/accounts"
-);
+accountLoadTimeout=setTimeout(()=>controller.abort(),12000);
+const r=await fetch(API+"/api/accounts",{
+  method:"GET",
+  cache:"no-store",
+  signal:controller.signal
+});
+clearTimeout(accountLoadTimeout);
 
-
+if(!r.ok) throw new Error("Server returned HTTP "+r.status);
 const d=await r.json();
+if(!d || !Array.isArray(d.accounts)) throw new Error(d?.error||"The server returned an unexpected response.");
 
 
 const a=d.accounts||[];
@@ -1001,8 +1012,11 @@ updateForwardingStatus(x);
 
 }catch(e){
 
-document.getElementById("accounts").innerHTML=
-'<div class="empty">Backend unavailable.</div>';
+clearTimeout(accountLoadTimeout);
+const message=e.name==="AbortError"
+  ? "The server did not respond within 12 seconds. It may be waking up or temporarily unavailable."
+  : (e.message||"Could not reach the server.");
+accountsBox.innerHTML='<div class="empty"><strong>Could not load accounts.</strong><br>'+esc(message)+'<br><br><button type="button" onclick="loadAccounts()">Try Again</button></div>';
 
 }
 
