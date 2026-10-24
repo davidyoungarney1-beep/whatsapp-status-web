@@ -70,9 +70,19 @@ if (!fs.existsSync(ACCOUNTS_FILE)) {
 
 const logger = pino({ level: "silent" });
 
+function withTimeout(operation, timeoutMs, message) {
+  let timer;
+  return Promise.race([
+    Promise.resolve().then(() => typeof operation === "function" ? operation() : operation),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); })
+  ]).finally(() => clearTimeout(timer));
+}
+
 const connections = new Map();
 const pairingWaiters = new Map();
 const reconnecting = new Set();
+// Prevent concurrent requests/reconnect timers from opening multiple sockets for one saved account.
+const connectionStarts = new Map();
 const directStatusEchoes = new Map();
 
 
@@ -760,7 +770,20 @@ async function getCurrentWhatsAppVersion() {
   return cachedWhatsAppVersion;
 }
 
-async function connectWhatsApp(
+function connectWhatsApp(account, phoneForPairing = null) {
+  const pending = connectionStarts.get(account.id);
+  if (pending) {
+    if (phoneForPairing) return pending.then(() => connectWhatsAppInternal(account, phoneForPairing));
+    return pending;
+  }
+  const starting = connectWhatsAppInternal(account, phoneForPairing);
+  connectionStarts.set(account.id, starting);
+  return starting.finally(() => {
+    if (connectionStarts.get(account.id) === starting) connectionStarts.delete(account.id);
+  });
+}
+
+async function connectWhatsAppInternal(
   account,
   phoneForPairing = null
 ) {
@@ -1052,33 +1075,26 @@ async function connectWhatsApp(
         );
 
         if (shouldReconnect) {
-          setTimeout(
-            async () => {
+          // A close event can fire more than once. Schedule at most one reconnect,
+          // and never delete or replace a newer socket created by another request.
+          if (!reconnecting.has(account.id)) {
+            reconnecting.add(account.id);
+            setTimeout(async () => {
               try {
-                connections.delete(
-                  account.id
-                );
-
-                await connectWhatsApp(
-                  account,
-                  null
-                );
-
+                if (!readAccounts().some(item => item.id === account.id)) return;
+                const current = connections.get(account.id);
+                if (current && current !== entry && current.sock) return;
+                if (connections.get(account.id) === entry) connections.delete(account.id);
+                await connectWhatsApp(account, null);
               } catch (error) {
-                console.error(
-                  `â Reconnect failed for ${account.phone}:`,
-                  error?.message ||
-                    error
-                );
+                console.error(`Reconnect failed for ${account.phone}:`, error?.message || error);
+              } finally {
+                reconnecting.delete(account.id);
               }
-            },
-            3000
-          );
-
-        } else {
-          connections.delete(
-            account.id
-          );
+            }, 3000);
+          }
+        } else if (connections.get(account.id) === entry) {
+          connections.delete(account.id);
         }
       }
     }
@@ -1777,9 +1793,11 @@ app.get(
         });
       }
 
-      const groups =
-        await connection.sock
-          .groupFetchAllParticipating();
+      const groups = await withTimeout(
+        () => connection.sock.groupFetchAllParticipating(),
+        15000,
+        "Loading WhatsApp groups timed out. Check the WhatsApp connection and tap Refresh Groups to retry."
+      );
 
       const list =
         Object.values(
