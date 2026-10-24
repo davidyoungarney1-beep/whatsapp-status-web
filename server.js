@@ -1600,12 +1600,18 @@ async function joinOneSharedGroup(accountId,code) {
   return result?{code,status:"joined",message:"Joined successfully"}:{code,status:"failed",message:"WhatsApp did not confirm the join"};
  } catch(e) {
   const msg=String(e?.message||e), low=msg.toLowerCase();
-  const status=/already.*(participant|member)|already.*in group|already.?joined/.test(low)?"already_joined":/expired|invalid.*invite|not.?found|approval|request.*join/.test(low)?"skipped":"failed";
-  return {code,status,message:status==="skipped"?"Invite is invalid, expired, or requires approval":msg.slice(0,200)};
+  // Only count approval as a successful request when the error explicitly confirms
+  // that WhatsApp accepted/sent the request. "Approval required" alone is not proof.
+  const requestConfirmed=/(request|requested).{0,30}(sent|submitted|accepted|pending)|(?:sent|submitted|accepted).{0,30}(join request|approval request)|pending.{0,20}approval/.test(low);
+  if(requestConfirmed) return {code,status:"pending_approval",message:"Request Sent — Awaiting Admin Approval"};
+  const approvalRequired=/approval required|requires? admin approval|admin approval required|join request required|must request to join/.test(low);
+  if(approvalRequired) return {code,status:"approval_required",message:"This group requires admin approval, but WhatsApp did not confirm that a join request was sent."};
+  const status=/already.*(participant|member)|already.*in group|already.?joined/.test(low)?"already_joined":/expired|invalid.*invite|not.?found|invite.*revoked|revoked.*invite/.test(low)?"skipped":"failed";
+  return {code,status,message:status==="skipped"?"Invite is invalid, expired, or revoked":msg.slice(0,200)};
  }
 }
 app.post("/api/accounts/:accountId/join-groups/:code/join",async(req,res)=>{
- const result=await joinOneSharedGroup(req.params.accountId,req.params.code); const ok=["joined","already_joined"].includes(result.status);
+ const result=await joinOneSharedGroup(req.params.accountId,req.params.code); const ok=["joined","already_joined","pending_approval"].includes(result.status);
  res.status(ok?200:400).json({success:ok,result});
 });
 function startJoinAllJob(id) {
@@ -1620,7 +1626,7 @@ function startJoinAllJob(id) {
   const failed={state:"failed",current:0,total:0,joined:0,alreadyJoined:0,skipped:0,failed:0,message:"Groups saved, but connect this WhatsApp account before joining shared groups."};
   joinAllJobs.set(id,failed); return failed;
  }
- const job={state:"running",current:0,total:0,joined:0,alreadyJoined:0,skipped:0,failed:0,cancelRequested:false,message:"Preparing shared group invites..."};
+ const job={state:"running",current:0,total:0,joined:0,alreadyJoined:0,requestsSent:0,skipped:0,failed:0,cancelRequested:false,message:"Preparing shared group invites..."};
  joinAllJobs.set(id,job);
  (async()=>{
   let groups;
@@ -1644,6 +1650,7 @@ function startJoinAllJob(id) {
    const result=await joinOneSharedGroup(id,g.code||g._id);
    if(result.status==="joined")job.joined++;
    else if(result.status==="already_joined")job.alreadyJoined++;
+   else if(result.status==="pending_approval")job.requestsSent++;
    else if(result.status==="skipped")job.skipped++;
    else job.failed++;
    job.lastResult={...result,name:g.name||"WhatsApp Group"};
@@ -1652,10 +1659,10 @@ function startJoinAllJob(id) {
   }
   if(job.cancelRequested) {
    job.state="stopped";
-   job.message="Stopped at "+job.current+"/"+job.total+" groups. "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";
+   job.message="Stopped at "+job.current+"/"+job.total+" groups. "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.requestsSent+" requests sent awaiting approval, "+job.skipped+" skipped, "+job.failed+" failed.";
   } else {
    job.state="completed";
-   job.message="Finished: "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";
+   job.message="Finished: "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.requestsSent+" requests sent awaiting approval, "+job.skipped+" skipped, "+job.failed+" failed.";
   }
  })().catch(e=>{
   job.state="failed";
