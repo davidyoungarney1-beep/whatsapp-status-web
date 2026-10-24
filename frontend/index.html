@@ -1475,17 +1475,14 @@ gs.filter(g=>g.selected).length;
 box.innerHTML=
 
 `
-<div class="group-header">
+<div class="group-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
 
-<span>
-<b>Groups</b>
-</span>
-
-<span class="selected-count">
-Selected: ${selectedCount}
-</span>
-
+<span><b>Groups</b></span>
+<span class="selected-count">Selected: ${selectedCount}</span>
+<button type="button" class="gray group-collapse-toggle" title="Hide groups" aria-expanded="true" onclick="toggleGroupList('${id}')" style="padding:3px 9px;min-width:30px;line-height:1;font-size:14px">⌃</button>
 </div>
+
+<div id="group-list-${id}">
 
 <div class="group-actions">
 <button class="gray" onclick="selectAllGroups('${id}', true)">Select All Groups</button>
@@ -1550,6 +1547,8 @@ Refresh Groups
 
 </div>
 
+</div>
+
 `;
 
 }catch(e){
@@ -1562,6 +1561,20 @@ e.message;
 }
 
 
+
+function toggleGroupList(id){
+  const list=document.getElementById("group-list-"+id);
+  const box=document.getElementById("g-"+id);
+  if(!list||!box)return;
+  const button=box.querySelector(".group-collapse-toggle");
+  const willHide=list.style.display!=="none";
+  list.style.display=willHide?"none":"block";
+  if(button){
+    button.textContent=willHide?"⌄":"⌃";
+    button.setAttribute("aria-expanded",String(!willHide));
+    button.title=willHide?"Show groups":"Hide groups";
+  }
+}
 
 function selectAllGroups(id, shouldSelect){
   const boxes=document.querySelectorAll(".cg-"+id);
@@ -1869,46 +1882,4 @@ try{
 
 const r=await fetch(
 API+"/api/accounts/"
-+encodeURIComponent(id),
-{
-method:"DELETE"
-}
-);
-
-
-const d=await r.json();
-
-
-if(!d.success){
-
-throw new Error(
-d.error||"Failed to remove account"
-);
-
-}
-
-
-alert(
-"Account removed successfully"
-);
-
-
-loadAccounts();
-
-
-}catch(e){
-
-alert(
-"Failed to remove account: "+
-e.message
-);
-
-}
-
-}
-
-</script>
-
-</body>
-
-</html>
++en
