@@ -1539,11 +1539,25 @@ app.get("/api/join-groups", async (req,res) => {
 });
 app.post("/api/join-groups", async (req,res) => {
  try {
-  const parsed=parseWhatsAppInvite(req.body?.link||req.body?.url);
-  if(!parsed)return res.status(400).json({success:false,error:"Paste a valid https://chat.whatsapp.com/ invite link."});
-  const group=await saveSharedJoinGroup({...parsed,name:String(req.body?.name||"WhatsApp Group").trim().slice(0,100),source:"user"});
-  res.json({success:true,group:{id:group.code,code:group.code,link:group.link,name:group.name},message:"Added to the shared library for all users."});
- } catch(e){res.status(500).json({success:false,error:e.message||"Could not save invite link"});}
+  const rawLinks=Array.isArray(req.body?.links)?req.body.links:[req.body?.link||req.body?.url].filter(Boolean);
+  if(!rawLinks.length)return res.status(400).json({success:false,error:"Paste one or more valid WhatsApp invite links."});
+  if(rawLinks.length>200)return res.status(400).json({success:false,error:"Please submit no more than 200 invite links at a time."});
+  const name=String(req.body?.name||"WhatsApp Group").trim().slice(0,100)||"WhatsApp Group";
+  const seen=new Set(), results=[]; let added=0,duplicates=0,invalid=0;
+  for(const value of rawLinks) {
+   const parsed=parseWhatsAppInvite(value);
+   if(!parsed){invalid++;results.push({link:String(value).slice(0,200),status:"invalid",message:"Not a valid WhatsApp invite link"});continue;}
+   if(seen.has(parsed.code)){duplicates++;results.push({code:parsed.code,status:"duplicate",message:"Duplicate in this submission; ignored"});continue;}
+   seen.add(parsed.code);
+   const existing=await mongoDb.collection("join_groups").findOne({_id:parsed.code});
+   const group=await saveSharedJoinGroup({...parsed,name,source:"user"});
+   if(existing)duplicates++;else added++;
+   results.push({code:parsed.code,link:group.link,name:group.name,status:existing?"already_exists":"added"});
+  }
+  const valid=results.filter(x=>x.status!=="invalid").length;
+  if(!valid)return res.status(400).json({success:false,error:"No valid WhatsApp invite links were found.",added,duplicates,invalid,results});
+  res.json({success:true,added,duplicates,invalid,results,message:"Processed "+rawLinks.length+" links: "+added+" new groups added, "+duplicates+" duplicates/already-existing links ignored, "+invalid+" invalid links."});
+ } catch(e){res.status(500).json({success:false,error:e.message||"Could not save invite links"});}
 });
 async function joinOneSharedGroup(accountId,code) {
  const account=readAccounts().find(a=>a.id===accountId); if(!account)return {code,status:"failed",message:"Account not found"};
