@@ -1,961 +1,6 @@
 <!DOCTYPE html>
 <html>
 
-<he style=\""display:none\""ad>
-
-<meta charset="UTF-8">
-
-<meta name="viewport" content="width=device-width,initial-scale=1">
-
-<title>WhatsApp Status Forwarder</title>
-
-<style>
-
-*{
-box-sizing:border-box
-}
-
-body{
-margin:0;
-font-family:Arial;
-background:#f4f7f6;
-color:#17211b
-}
-
-header{
-background:linear-gradient(135deg,#075e54,#128c7e);
-color:white;
-padding:24px 18px
-}
-
-header h1{
-margin:0 0 6px;
-font-size:24px
-}
-
-header p{
-margin:0;
-font-size:14px
-}
-
-main{
-max-width:900px;
-margin:20px auto;
-padding:0 12px
-}
-
-.card{
-background:white;
-padding:18px;
-border-radius:14px;
-margin-bottom:18px;
-box-shadow:0 4px 18px #0001
-}
-
-h2{
-font-size:18px;
-margin-top:0
-}
-
-input[type=text]{
-width:100%;
-padding:13px;
-border:1px solid #ddd;
-border-radius:8px;
-margin-bottom:10px;
-font-size:15px
-}
-
-button{
-border:0;
-border-radius:8px;
-padding:11px 16px;
-background:#128c7e;
-color:white;
-font-weight:bold;
-margin:4px;
-cursor:pointer
-}
-
-button:hover{
-opacity:.92
-}
-
-.gray{
-background:#555
-}
-
-.message{
-padding:10px;
-margin-top:10px;
-border-radius:7px
-}
-
-.success{
-background:#e8f5e9;
-color:#2e7d32
-}
-
-.error{
-background:#ffebee;
-color:#c62828
-}
-
-.pair{
-display:none;
-text-align:center;
-background:#eefaf7;
-padding:18px;
-margin-top:15px;
-border-radius:9px
-}
-
-.qr-panel{display:none;text-align:center;background:#eefaf7;padding:18px;margin-top:15px;border-radius:9px}
-.qr-code{display:flex;justify-content:center;align-items:center;min-height:250px;margin:14px auto;background:white;padding:10px;border-radius:8px;max-width:270px}
-.qr-code img,.qr-code canvas{max-width:100%;height:auto}
-.qr-panel small{display:block;line-height:1.6;margin:10px 0}
-
-.code{
-font-size:28px;
-font-weight:bold;
-letter-spacing:4px;
-color:#075e54;
-margin:12px
-}
-
-.account{
-border:1px solid #ddd;
-border-radius:9px;
-padding:15px;
-margin:12px 0
-}
-
-.top{
-display:flex;
-justify-content:space-between;
-gap:10px;
-flex-wrap:wrap
-}
-
-.status{
-font-size:13px;
-color:#777;
-margin-top:5px
-}
-
-.connected{
-color:#128c7e;
-font-weight:bold
-}
-
-
-/* LIVE FORWARDING STATUS */
-
-.forward-status{
-margin-top:12px;
-padding:11px 13px;
-border-radius:8px;
-background:#f5f5f5;
-font-size:13px;
-font-weight:bold;
-display:flex;
-align-items:center;
-gap:8px
-}
-
-.forward-dot{
-width:9px;
-height:9px;
-border-radius:50%;
-background:#999;
-flex-shrink:0
-}
-
-.forward-status.waiting{
-color:#666;
-background:#f4f4f4
-}
-
-.forward-status.waiting .forward-dot{
-background:#999
-}
-
-.forward-status.forwarding{
-color:#8a6500;
-background:#fff8df
-}
-
-.forward-status.forwarding .forward-dot{
-background:#e0a800
-}
-
-.forward-status.forwarded{
-color:#2e7d32;
-background:#e8f5e9
-}
-
-.forward-status.forwarded .forward-dot{
-background:#2e7d32
-}
-
-.forward-status.partial{
-color:#8a6500;
-background:#fff8df
-}
-
-.forward-status.partial .forward-dot{
-background:#e0a800
-}
-
-.forward-status.failed{
-color:#c62828;
-background:#ffebee
-}
-
-.forward-status.failed .forward-dot{
-background:#c62828
-}
-
-
-/* POSTING MODES */
-.post-mode-panel{margin-top:14px;padding:14px;border:1px solid #dce7e3;border-radius:10px;background:#fbfefd}
-.mode-options{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
-.mode-option{background:#6b7280}
-.mode-option.active{background:#075e54;box-shadow:0 0 0 2px #d4eee7}\n.leave-all-button{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:150px;min-height:64px;padding:9px 14px;background:#dc3545;color:#fff;border:0;border-radius:10px;font-weight:bold;line-height:1.2;margin:8px 4px}\n.leave-all-button .leave-all-x{font-size:22px;line-height:1}\n.leave-all-button:hover{background:#b02a37}\n.leave-all-button:disabled{opacity:.65;cursor:wait}
-.post-mode-panel input[type=url]{width:100%;padding:13px;border:1px solid #ddd;border-radius:8px;margin:4px 0 8px;font-size:15px}
-.manual-mode-note{padding:11px;background:#eef7f4;border-radius:8px;font-size:14px;line-height:1.55}
-.post-result{display:none;padding:10px;margin-top:8px;border-radius:7px;font-size:14px}
-.post-result.success{display:block;background:#e8f5e9;color:#2e7d32}
-.post-result.error{display:block;background:#ffebee;color:#c62828}
-
-/* GROUPS */
-
-.groups{
-display:none;
-border-top:1px solid #eee;
-margin-top:14px;
-padding-top:14px
-}
-
-.group-header{
-display:flex;
-justify-content:space-between;
-align-items:center;
-gap:10px;
-margin-bottom:10px;
-padding:10px;
-background:#f0f8f6;
-border-radius:8px;
-font-size:14px
-}
-
-.selected-count{
-font-weight:bold;
-color:#075e54
-}
-
-.group{
-display:grid;
-grid-template-columns:18px minmax(0,1fr) auto;
-align-items:center;
-gap:9px;
-padding:10px 4px;
-border-bottom:1px solid #eee;
-cursor:pointer
-}
-
-.group input{
-width:18px;
-height:18px;
-accent-color:#128c7e;
-cursor:pointer
-}
-
-.group-name{
-min-width:0;
-font-size:14px;
-overflow:hidden;
-text-overflow:ellipsis;
-white-space:nowrap
-}
-
-.selected-badge{
-font-size:11px;
-font-weight:bold;
-background:#dff5ef;
-color:#075e54;
-padding:3px 6px;
-border-radius:12px;
-white-space:nowrap
-}
-
-.group-actions{
-margin-top:12px;
-display:flex;
-flex-wrap:wrap;
-gap:4px
-}
-
-.empty{
-text-align:center;
-color:#777;
-padding:15px
-}
-
-
-/* HOW TO USE BUTTON */
-
-.help-button{
-background:white;
-color:#075e54;
-border:2px solid white;
-font-size:14px;
-margin-top:10px
-}
-
-.help-button:hover{
-background:#e8f5f2
-}
-
-
-/* HOW TO USE PANEL */
-
-.help-overlay{
-display:none;
-position:fixed;
-inset:0;
-background:#0008;
-z-index:9999;
-padding:18px;
-overflow-y:auto
-}
-
-.help-box{
-max-width:750px;
-margin:30px auto;
-background:white;
-border-radius:15px;
-padding:20px;
-box-shadow:0 10px 40px #0005
-}
-
-.help-box h2{
-color:#075e54;
-margin-top:0;
-font-size:21px
-}
-
-.help-box h3{
-color:#075e54;
-font-size:16px;
-margin-top:20px
-}
-
-.help-box ol{
-padding-left:22px
-}
-
-.help-box li{
-margin-bottom:14px;
-line-height:1.6
-}
-
-.help-box .important{
-background:#fff8df;
-border-left:4px solid #e0a800;
-padding:13px;
-border-radius:7px;
-margin-top:15px;
-line-height:1.6
-}
-
-.help-box .private{
-background:#eefaf7;
-border-left:4px solid #128c7e;
-padding:13px;
-border-radius:7px;
-margin-top:15px;
-line-height:1.6
-}
-
-.help-box .status-info{
-background:#f4f4f4;
-padding:13px;
-border-radius:7px;
-margin-top:15px;
-line-height:1.6
-}
-
-.close-help{
-background:#dc3545;
-width:100%;
-margin-top:15px
-}
-
-
-/* VISIBLE FOOTER */
-
-footer{
-background:linear-gradient(135deg,#075e54,#128c7e);
-color:white;
-text-align:center;
-padding:22px 15px;
-margin-top:30px;
-font-size:14px;
-line-height:1.8;
-box-shadow:0 -3px 15px #0002
-}
-
-footer .producer{
-font-size:16px;
-font-weight:bold;
-margin-bottom:5px
-}
-
-footer .contact{
-font-size:13px;
-opacity:.95
-}
-
-footer .whatsapp{
-font-weight:bold;
-color:white
-}
-
-.danger{
-background:#dc3545!important;
-color:white!important;
-border:0;
-border-radius:50%;
-width:24px;
-height:24px;
-padding:0;
-margin-left:8px;
-font-weight:bold;
-cursor:pointer
-}
-
-.danger:hover{
-background:#b02a37!important
-}
-
-</style>
-
-</head>
-
-
-<body>
-
-
-<header>
-
-<h1>DY WhatsApp Status Forwarder</h1>
-
-<p>
-Forward your WhatsApp Status to selected groups.
-</p>
-<p>Read the instructions first. Choose your WhatsApp account, select the groups you want to receive your status, and save your selection before posting.</p>
-</header>
-
-
-<main>
-
-
-<div class="card">
-
-<h2>Connect WhatsApp</h2>
-
-<p>Choose either method to link your WhatsApp account.</p>
-
-<label for="phone">Phone number (for pairing-code method)</label>
-<input
-id="phone"
-type="text"
-placeholder="2348012345678"
->
-
-<button onclick="connect()">
-Use Pairing Code
-</button>
-
-<button class="gray" onclick="connectByQr()">
-Scan QR Code Instead
-</button>
-
-<div id="msg"></div>
-
-<div id="qr-panel" class="qr-panel">
-<strong>Scan this code with WhatsApp</strong>
-<div id="qrcode" class="qr-code"></div>
-<small id="qr-instructions">Open WhatsApp → Linked devices → Link a device, then scan this QR code.</small>
-<button class="gray" onclick="hideQr()">Hide QR Code</button>
-</div>
-
-<div id="pair" class="pair">
-
-<div>
-Pairing Code
-</div>
-
-<div id="code" class="code">
---------
-</div>
-
-<small>
-WhatsApp → Linked Devices → Link a Device → Link with phone number
-</small>
-
-</div>
-
-</div>
-
-
-<div class="card">
-
-<h2>Connected Accounts</h2>
-
-<div id="accounts">
-
-<div class="empty">
-Loading...
-</div>
-
-</div>
-
-</div>
-
-
-</main>
-
-
-<!-- HOW TO USE PANEL -->
-
-<div
-id="help-overlay"
-class="help-overlay"
-onclick="closeHelpOutside(event)"
->
-
-<div
-class="help-box"
-onclick="event.stopPropagation()"
->
-
-<h2>How to Use the WhatsApp Status Forwarder</h2>
-
-<p>Connect WhatsApp, choose your destination groups, save your selection, and then post. Keep this page open while the bot is working.</p>
-
-<h3>1. Connect WhatsApp</h3>
-<ol>
-<li>Enter your WhatsApp number in international format without the plus sign (for example, <strong>2348012345678</strong>) and select <strong>Use Pairing Code</strong>, or choose <strong>Scan QR Code Instead</strong>.</li>
-<li>For a pairing code, open WhatsApp on your phone and go to <strong>Linked devices → Link a device → Link with phone number</strong>. Enter the code shown on this page. For QR, scan the displayed code from Linked devices.</li>
-<li>Keep WhatsApp open until this page shows <strong>Connected</strong>. If it disconnects, reconnect the account.</li>
-</ol>
-
-<h3>2. Choose how to post</h3>
-<ul>
-<li><strong>Website Direct (Text + Link):</strong> Write your status text and include your link in the same box, then choose <strong>Post Text to My Status</strong>. This mode is for text and links only; it does not post photos or videos.</li>
-<li><strong>Manual WhatsApp Status:</strong> Open WhatsApp on your phone and publish your text, photo, or video as a normal Status. With forwarding enabled, the bot will attempt to forward it to your saved groups.</li>
-</ul>
-
-<h3>3. Select destination groups</h3>
-<ol>
-<li>Under the connected account, click <strong>Load Groups</strong> and wait for your groups to appear.</li>
-<li>Tick the groups that should receive your status. Use <strong>Select All Groups</strong> or <strong>Clear Selection</strong> if helpful.</li>
-<li>The small <strong>⌃ / ⌄</strong> button beside the Groups heading hides or shows the group list. It does not change your selections.</li>
-<li>Click <strong>Save Groups</strong> and wait for the save to finish. Saving stores your forwarding selection; it does <strong>not</strong> join groups.</li>
-</ol>
-
-<div class="important"><strong>Before posting:</strong> Make sure the account says <strong>Connected</strong>, the <strong>Forwarding</strong> switch is ON, your intended groups are selected, and you have clicked <strong>Save Groups</strong>.</div>
-
-<h3>4. Post and check progress</h3>
-<p>Use Website Direct for text plus a link, or Manual WhatsApp Status for photos and videos. Watch the live status on the account card:</p>
-<div class="status-info">
-<strong>Waiting</strong><br>The bot is ready for a new status.<br><br>
-<strong>Forwarding</strong><br>The bot detected a status and is attempting to send it to the selected groups.<br><br>
-<strong>Forwarded</strong><br>The forwarding task completed successfully for the selected destinations.<br><br>
-<strong>Partially Forwarded</strong><br>Some destinations may not have received the status. Check the progress details and group availability.<br><br>
-<strong>Failed</strong><br>The bot could not complete forwarding. Check the connection, enable forwarding, save your group selection again if needed, and retry.
-</div>
-
-<h3>5. For each new status</h3>
-<ol>
-<li>Check that forwarding is ON.</li>
-<li>Review your selected groups and click <strong>Save Groups</strong> if you changed them.</li>
-<li>Post through the mode you want to use.</li>
-<li>Keep this page open and wait for the progress status to finish.</li>
-</ol>
-
-<p><strong>Privacy reminder:</strong> WhatsApp Status privacy settings control who can see the original status. Review those settings before posting; forwarding may send the content to the groups you selected.</p>
-
-<button
-class="close-help"
-onclick="closeHelp()"
->
-Close Instructions
-</button>
-
-</div>
-
-</div>
-
-
-<!-- FOOTER -->
-
-<footer>
-
-<div class="producer">
-Produced by DY
-</div>
-
-<div class="contact">
-If the bot fails, contact me on WhatsApp:
-<span class="whatsapp">09152869756</span>
-</div>
-
-
-<button
-class="help-button"
-onclick="openHelp()"
->
-How to Use the Bot
-</button>
-
-</footer>
-
-
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>
-
-
-const API="https://whatsapp-status-web.onrender.com";
-
-
-
-function message(t,c){
-
-const m=document.getElementById("msg");
-
-m.className="message "+c;
-
-m.textContent=t;
-
-}
-
-
-
-async function connect(){
-
-const phone=document
-.getElementById("phone")
-.value
-.trim();
-
-
-if(!phone){
-
-message(
-"Enter your WhatsApp number.",
-"error"
-);
-
-return;
-
-}
-
-
-try{
-
-message(
-"Connecting...",
-"success"
-);
-
-
-document
-.getElementById("pair")
-.style.display="none";
-
-
-const r=await fetch(
-API+"/api/accounts/connect",
-{
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify({
-phone
-})
-}
-);
-
-
-const d=await r.json();
-
-
-if(!r.ok){
-
-throw Error(
-d.error||"Connection failed"
-);
-
-}
-
-
-if(d.pairingCode){
-
-document
-.getElementById("code")
-.textContent=d.pairingCode;
-
-
-document
-.getElementById("pair")
-.style.display="block";
-
-
-message(
-"Pairing code generated.",
-"success"
-);
-
-}
-
-
-loadAccounts();
-
-
-}catch(e){
-
-message(
-e.message,
-"error"
-);
-
-}
-
-}
-
-
-async function connectByQr(){
-  const qrButton=document.querySelector('button[onclick="connectByQr()"]');
-  if(qrButton?.disabled) return;
-  if(qrButton) { qrButton.disabled=true; qrButton.textContent="Preparing QR Code..."; }
-  const panel=document.getElementById("qr-panel");
-  const qrBox=document.getElementById("qrcode");
-  panel.style.display="block";
-  qrBox.innerHTML="";
-  document.getElementById("qr-instructions").textContent="Preparing a secure, temporary QR code...";
-  message("Preparing QR code...", "success");
-  let accountId=null;
-  let lastQr=null;
-  try{
-    const r=await fetch(API+"/api/accounts/connect",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({method:"qr"})
-    });
-    const d=await r.json();
-    if(!r.ok) throw Error(d.error||"Could not start QR connection");
-    accountId=d.account?.id;
-    if(!accountId) throw Error("The server did not return an account ID.");
-    loadAccounts();
-    for(let i=0;i<120;i++){
-      await new Promise(resolve=>setTimeout(resolve,1000));
-      const statusResponse=await fetch(API+"/api/accounts/"+encodeURIComponent(accountId)+"/qr");
-      const status=await statusResponse.json();
-      if(!statusResponse.ok) throw Error(status.error||"Could not check QR connection");
-      if(status.lastDisconnectCode===405){
-        throw Error("WhatsApp rejected the session (405) before creating a QR code. The backend is refreshing the WhatsApp version; tap Scan QR Code Again in a moment.");
-      }
-      if(status.connected){
-        panel.style.display="none";
-        message("WhatsApp connected successfully.","success");
-        await loadAccounts();
-        return;
-      }
-      if(status.qr && status.qr!==lastQr){
-        if(typeof QRCode==="undefined") throw Error("The QR display library did not load. Refresh the page and try again.");
-        lastQr=status.qr;
-        qrBox.innerHTML="";
-        new QRCode(qrBox,{text:status.qr,width:240,height:240,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
-        document.getElementById("qr-instructions").textContent="On your phone: WhatsApp → Linked devices → Link a device, then scan this code. Keep this page open.";
-        message("QR code ready. Scan it with WhatsApp.","success");
-      }
-    }
-    throw Error("QR connection timed out. Try again to generate a fresh code.");
-  }catch(e){
-    message(e.message,"error");
-    loadAccounts();
-  }finally{
-    if(qrButton) { qrButton.disabled=false; qrButton.textContent="Scan QR Code Instead"; }
-  }
-}
-
-function hideQr(){
-  document.getElementById("qr-panel").style.display="none";
-}
-
-
-
-async function loadAccounts(){
-
-const accountsBox=document.getElementById("accounts");
-let accountLoadTimeout;
-const controller=new AbortController();
-
-accountsBox.innerHTML='<div class="empty">Connecting to the server and loading accounts...</div>';
-
-try{
-
-accountLoadTimeout=setTimeout(()=>controller.abort(),12000);
-const r=await fetch(API+"/api/accounts",{
-  method:"GET",
-  cache:"no-store",
-  signal:controller.signal
-});
-clearTimeout(accountLoadTimeout);
-
-if(!r.ok) throw new Error("Server returned HTTP "+r.status);
-const d=await r.json();
-if(!d || !Array.isArray(d.accounts)) throw new Error(d?.error||"The server returned an unexpected response.");
-
-
-const a=d.accounts||[];
-
-
-const box=
-document.getElementById("accounts");
-
-
-if(!a.length){
-
-box.innerHTML=
-'<div class="empty">No WhatsApp accounts connected yet.</div>';
-
-return;
-
-}
-
-
-/*
-Preserve any group sections
-that are already open.
-*/
-
-const oldGroups={};
-
-
-a.forEach(x=>{
-
-const old=
-document.getElementById("g-"+x.id);
-
-
-if(old){
-
-oldGroups[x.id]={
-html:old.innerHTML,
-display:old.style.display
-};
-
-}
-
-});
-
-
-box.innerHTML=a.map(x=>`
-
-<div class="account">
-
-<div class="top">
-
-<div>
-
-<b>
-${esc(x.phone||"Unknown")}
-</b>
-
-
-<div class="status ${x.connected?"connected":""}">
-
-${x.connected
-?"● Connected"
-:"○ Disconnected"}
-
-</div>
-
-</div>
-
-
-<label>
-
-<input
-type="checkbox"
-${x.forwardingEnabled?"checked":""}
-onchange="forward('${x.id}',this.checked)"
->
-
-Forwarding
-
-</label>
-
-
-<button
-class="danger"
-onclick="removeAccount('${x.id}')"
-title="Remove account"
->
-✕
-</button>
-
-</div>
-
-
-<!-- LIVE FORWARDING STATUS -->
-
-<div
-id="forward-status-${esc(x.id)}"
-class="forward-status waiting"
->
-
-<span class="forward-dot"></span>
-
-<span class="forward-status-text">
-Waiting
-</span>
-
-</div>
-<button type="button" class="danger stop-forwarding-btn" id="stop-forwarding-${esc(x.id)}" onclick="stopForwarding('${x.id}')" style="display:none;margin:8px 0;width:100%">Stop Forwarding</button>
-
-<div class="post-mode-panel">
-  <b>Choose How to Post</b>
-  <div class="mode-options">
-    <button type="button" class="mode-option active" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>\n    <button type="button" class="mode-option" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
-  </div>
-  <div id="mode-direct-${x.id}" style="display:none">
-    <label for="link-url-${x.id}"><b>WhatsApp Status text + link</b></label>
-    <textarea id="link-url-${x.id}" rows="4" maxlength="700" placeholder="Write your status text, then include your link too..."></textarea>
-    <button type="button" onclick="postLinkStatus('${x.id}')">Post Text to My Status</button>
-    <div id="link-result-${x.id}" class="post-result"></div>
-    <small>Direct mode supports plain text or links only. Photos and videos are excluded. Add text and a link together. A preview is requested and will appear when WhatsApp supports it. If Forwarding is ON, the bot will forward that status to your selected groups and skip locked groups.</small>
-  </div>
-  <div id="mode-manual-${x.id}">
-    <div class="manual-mode-note"><b>Manual mode:</b> Open WhatsApp on your phone and post your text, photo, or video to your Status as usual. If Forwarding is ON, the bot will forward that status to your selected groups and skip locked groups.</div>
-  </div>
-</div>
-
-<button onclick="groups('${x.id}')">
-Load Groups
-</button>
-
-<button type="button" class=\""leave-all-button\""!DOCTYPE html>
-<html>
-
 <head>
 
 <meta charset="UTF-8">
@@ -1176,7 +221,7 @@ background:#c62828
 .post-mode-panel{margin-top:14px;padding:14px;border:1px solid #dce7e3;border-radius:10px;background:#fbfefd}
 .mode-options{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
 .mode-option{background:#6b7280}
-.mode-option.active{background:#075e54;box-shadow:0 0 0 2px #d4eee7}\n.leave-all-button{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:150px;min-height:64px;padding:9px 14px;background:#dc3545;color:#fff;border:0;border-radius:10px;font-weight:bold;line-height:1.2;margin:8px 4px}\n.leave-all-button .leave-all-x{font-size:22px;line-height:1}\n.leave-all-button:hover{background:#b02a37}\n.leave-all-button:disabled{opacity:.65;cursor:wait}
+.mode-option.active{background:#075e54;box-shadow:0 0 0 2px #d4eee7}
 .post-mode-panel input[type=url]{width:100%;padding:13px;border:1px solid #ddd;border-radius:8px;margin:4px 0 8px;font-size:15px}
 .manual-mode-note{padding:11px;background:#eef7f4;border-radius:8px;font-size:14px;line-height:1.55}
 .post-result{display:none;padding:10px;margin-top:8px;border-radius:7px;font-size:14px}
@@ -1389,6 +434,10 @@ margin-left:8px;
 font-weight:bold;
 cursor:pointer
 }
+
+.leave-all-button{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:150px;min-height:64px;padding:9px 14px;background:#dc3545;color:#fff;border:0;border-radius:10px;font-weight:bold;line-height:1.2;margin:8px 4px;cursor:pointer}
+.leave-all-button span:first-child{font-size:22px;line-height:1}
+.leave-all-button:hover{background:#b02a37}
 
 .danger:hover{
 background:#b02a37!important
@@ -1890,7 +939,8 @@ Waiting
 <div class="post-mode-panel">
   <b>Choose How to Post</b>
   <div class="mode-options">
-    <button type="button" class="mode-option" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>\n    <button type="button" class="mode-option active" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
+    <button type="button" class="mode-option active" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>
+    <button type="button" class="mode-option" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
   </div>
   <div id="mode-direct-${x.id}">
     <label for="link-url-${x.id}"><b>WhatsApp Status text + link</b></label>
@@ -1908,7 +958,7 @@ Waiting
 Load Groups
 </button>
 
-<button type="button" class="leave-all-button" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Remove All Groups</span></button>
+<button type="button" class="danger" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Remove All Groups</span></button>
 <div id="leave-all-progress-${esc(x.id)}" class="post-result" style="display:none;margin-top:8px"></div>
 <button type="button" class="gray" id="stop-leave-all-${esc(x.id)}" onclick="stopLeaveAllGroups('${x.id}')" style="display:none;margin:4px 0;width:100%">Stop Leaving Groups</button>
 
@@ -2264,4 +1314,472 @@ box.innerHTML=
 
 <span><b>Groups</b></span>
 <span class="selected-count">Selected: ${selectedCount}</span>
-<button type="button" class="gray group-collapse-toggle" title="Hide groups" aria-expanded="true" onclick="toggleGroupList('${id}')"
+<button type="button" class="gray group-collapse-toggle" title="Hide groups" aria-expanded="true" onclick="toggleGroupList('${id}')" style="padding:3px 9px;min-width:30px;line-height:1;font-size:14px">⌃</button>
+</div>
+
+<div id="group-list-${id}">
+
+<div class="group-actions">
+<button class="gray" onclick="selectAllGroups('${id}', true)">Select All Groups</button>
+<button class="gray" onclick="selectAllGroups('${id}', false)">Clear Selection</button>
+</div>
+`+
+
+gs.map(g=>`
+
+<label class="group">
+
+<input
+type="checkbox"
+class="cg-${id}"
+value="${esc(g.id)}"
+${g.selected?"checked":""}
+onchange="updateSelectedCount('${id}')"
+>
+
+<span class="group-name">
+${esc(
+g.name||
+g.subject||
+g.id
+)}
+</span>
+
+${g.selected
+?'<span class="selected-badge">Selected</span>'
+:""}
+
+</label>
+
+`).join("")+
+
+`
+
+<div
+id="count-${id}"
+class="selected-count"
+style="margin-top:10px"
+>
+Selected: ${selectedCount} group${selectedCount===1?"":"s"}
+</div>
+
+
+<div class="group-actions">
+
+<button
+onclick="saveGroups('${id}')"
+>
+Save Groups
+</button>
+
+
+<button
+class="gray"
+onclick="groups('${id}')"
+>
+Refresh Groups
+</button>
+
+</div>
+
+</div>
+
+`;
+
+}catch(e){
+
+box.innerHTML=
+e.message;
+
+}
+
+}
+
+
+
+function toggleGroupList(id){
+  const list=document.getElementById("group-list-"+id);
+  const box=document.getElementById("g-"+id);
+  if(!list||!box)return;
+  const button=box.querySelector(".group-collapse-toggle");
+  const willHide=list.style.display!=="none";
+  list.style.display=willHide?"none":"block";
+  if(button){
+    button.textContent=willHide?"⌄":"⌃";
+    button.setAttribute("aria-expanded",String(!willHide));
+    button.title=willHide?"Show groups":"Hide groups";
+  }
+}
+
+function selectAllGroups(id, shouldSelect){
+  const boxes=document.querySelectorAll(".cg-"+id);
+  boxes.forEach(box=>{ box.checked=shouldSelect; });
+  updateSelectedCount(id);
+}
+
+function updateSelectedCount(id){
+
+const boxes=
+document.querySelectorAll(
+".cg-"+id
+);
+
+
+let count=0;
+
+
+boxes.forEach(b=>{
+
+if(b.checked){
+
+count++;
+
+}
+
+});
+
+
+const counter=
+document.getElementById(
+"count-"+id
+);
+
+
+if(counter){
+
+counter.textContent=
+"Selected: "+
+count+
+" group"+
+(count===1?"":"s");
+
+}
+
+}
+
+
+
+async function saveGroups(id){
+
+const boxes=
+document.querySelectorAll(
+".cg-"+id
+);
+
+
+const selected=[];
+
+
+boxes.forEach(b=>{
+
+if(b.checked){
+
+selected.push(
+b.value
+);
+
+}
+
+});
+
+
+try{
+
+const r=await fetch(
+
+API+"/api/accounts/"
++encodeURIComponent(id)
++"/groups",
+
+{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+groups:selected
+})
+
+}
+
+);
+
+
+const d=await r.json();
+
+
+if(!r.ok){
+
+throw Error(
+d.error||"Save failed"
+);
+
+}
+
+
+alert(d.message || (selected.length+" groups saved. No groups were joined."));
+
+
+/*
+Reload the group list so the
+Selected badges are accurate.
+*/
+
+await groups(id);
+if(window.sjWatchAccount) window.sjWatchAccount(id);
+
+
+}catch(e){
+
+alert(
+e.message
+);
+
+}
+
+}
+
+
+
+async function confirmLeaveAllGroups(id){
+  const confirmed=confirm("Leave ALL WhatsApp groups for this connected account?\n\nThis affects only this account. You may need new invitations to rejoin groups. Any groups successfully left will be removed from this account's forwarding selection.\n\nContinue?");
+  if(!confirmed)return;
+  const button=document.getElementById("leave-all-btn-"+id);
+  const box=document.getElementById("leave-all-progress-"+id);
+  if(button){button.disabled=true;button.textContent="Starting...";}
+  if(box){box.style.display="block";box.className="post-result success";box.textContent="Starting Leave All Groups...";}
+  try{
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const data=await r.json();
+    if(!r.ok||!data.success)throw new Error(data.error||"Could not start Leave All Groups.");
+    await pollLeaveAllGroups(id);
+  }catch(error){
+    if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not leave groups.";}
+  }finally{
+    if(button){button.disabled=false;button.textContent="Leave All Groups";}
+  }
+}
+
+async function pollLeaveAllGroups(id){
+  const button=document.getElementById("leave-all-btn-"+id);
+  const box=document.getElementById("leave-all-progress-"+id);
+  if(button){button.disabled=true;button.textContent="Leaving Groups...";}
+  const stopButton=document.getElementById("stop-leave-all-"+id);
+  if(stopButton)stopButton.style.display="block";
+  let terminal=false;
+  try{
+    while(!terminal){
+      const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups/progress",{cache:"no-store"});
+      const data=await r.json();
+      if(!r.ok||!data.success)throw new Error(data.error||"Could not read leave progress.");
+      const p=data.progress||{};
+      if(box){
+        box.style.display="block";
+        box.className="post-result "+(["failed"].includes(p.state)?"error":(["completed","partial","stopped"].includes(p.state)?(p.state==="failed"?"error":"success"):"success"));
+        box.textContent=(p.message||"Working...")+(p.total?" Progress: "+(p.current||0)+"/"+p.total+"; left "+(p.left||0)+"; failed "+(p.failed||0)+".":"");
+      }
+      terminal=["completed","partial","failed","stopped"].includes(p.state);
+      if(!terminal)await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    await groups(id).catch(()=>{});
+  }catch(error){
+    if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not check leave progress.";}
+  }finally{
+    if(button){button.disabled=false;button.textContent="Leave All Groups";}
+    if(stopButton)stopButton.style.display="none";
+  }
+}
+
+async function stopLeaveAllGroups(id){
+  try{await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups/stop",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});}
+  catch(error){alert(error.message||"Could not stop the task.");}
+}
+
+async function stopForwarding(id){
+  const button=document.getElementById("stop-forwarding-"+id);
+  if(button){button.disabled=true;button.textContent="Stopping...";}
+  try{
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/stop-forwarding",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const data=await r.json();
+    if(!r.ok||!data.success) throw new Error(data.error||"Could not stop forwarding");
+    if(button) button.textContent=data.stopped?"Stopping...":"No Active Forwarding";
+    await pollForwardingStatus();
+  }catch(e){
+    if(button){button.disabled=false;button.textContent="Stop Forwarding";}
+    alert(e.message||"Could not stop forwarding");
+  }
+}
+
+async function forward(id,enabled){
+
+try{
+
+const r=await fetch(
+
+API+"/api/accounts/"
++encodeURIComponent(id)
++"/forwarding",
+
+{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+enabled
+})
+
+}
+
+);
+
+
+const d=await r.json();
+
+
+if(!r.ok){
+
+throw Error(
+d.error||"Update failed"
+);
+
+}
+
+
+}catch(e){
+
+alert(
+e.message
+);
+
+loadAccounts();
+
+}
+
+}
+
+
+
+function esc(v){
+
+return String(v??"")
+
+.replaceAll(
+"&",
+"&amp;"
+)
+
+.replaceAll(
+"<",
+"&lt;"
+)
+
+.replaceAll(
+">",
+"&gt;"
+)
+
+.replaceAll(
+'"',
+"&quot;"
+)
+
+.replaceAll(
+"'",
+"&#039;"
+);
+
+}
+
+
+/*
+HOW TO USE PANEL
+*/
+
+function openHelp(){
+
+document
+.getElementById("help-overlay")
+.style.display="block";
+
+document.body.style.overflow="hidden";
+
+}
+
+
+function closeHelp(){
+
+document
+.getElementById("help-overlay")
+.style.display="none";
+
+document.body.style.overflow="";
+
+}
+
+
+function closeHelpOutside(event){
+
+if(
+event.target.id==="help-overlay"
+){
+
+closeHelp();
+
+}
+
+}
+
+
+/*
+Initial account loading.
+*/
+
+loadAccounts();
+
+
+/*
+Poll the backend for live
+forwarding progress every 1.5 seconds.
+
+This does NOT reload the account
+cards, so opened group lists
+remain open.
+*/
+
+setInterval(
+pollForwardingStatus,
+1500
+);
+
+
+
+async function removeAccount(id){
+
+if(!confirm(
+"Remove this WhatsApp account? This will disconnect it and delete its saved session."
+)) return;
+
+
+try{
+
+const r=await fetch(
+API+"/api/accounts/"
++encodeURIComponent(id),{method:"DELETE"});
+    const d=await r.json();
+    if(!r.ok) throw Error(d.error||"Could not remove account");
+    await loadAccounts();
+  }catch(e){
+    alert(e.message||"Could not remove account");
+  }
+}
+
+</script>
+</body>
+</html>
