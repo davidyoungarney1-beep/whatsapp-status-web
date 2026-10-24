@@ -1551,20 +1551,25 @@ async function joinOneSharedGroup(accountId,code) {
  try {
   const group=await mongoDb.collection("join_groups").findOne({_id:code}); if(!group)return {code,status:"failed",message:"Invite link not found"};
   const sock=conn.sock;
-  // Pre-check membership by resolving the invite to its group ID, then inspecting groups this account participates in.
-  if(typeof sock.groupGetInviteInfo==="function" && typeof sock.groupFetchAllParticipating==="function") {
-   try {
-    const inviteInfo=await sock.groupGetInviteInfo(code);
-    const groupId=inviteInfo?.id;
-    if(groupId) {
-     const participating=await sock.groupFetchAllParticipating();
-     if(participating && Object.prototype.hasOwnProperty.call(participating,groupId))
-      return {code,status:"already_joined",message:"Already a member; skipped without joining again",groupId};
-    }
-   } catch(checkError) {
-    // If WhatsApp cannot resolve membership from the invite, fall back to WhatsApp's join response.
-   }
+  // Fail closed: never attempt to join if membership could not be checked. This avoids
+  // duplicate join attempts when WhatsApp's membership/invite lookup is temporarily unavailable.
+  if(typeof sock.groupGetInviteInfo!=="function" || typeof sock.groupFetchAllParticipating!=="function") {
+   return {code,status:"failed",message:"Membership verification is unavailable; skipped to avoid an unsafe duplicate join. Retry later."};
   }
+  let inviteInfo, participating;
+  try {
+   inviteInfo=await sock.groupGetInviteInfo(code);
+   if(!inviteInfo?.id) return {code,status:"failed",message:"WhatsApp did not provide a group ID, so membership could not be verified. Retry later."};
+   participating=await sock.groupFetchAllParticipating();
+   if(!participating || typeof participating!=="object") {
+    return {code,status:"failed",message:"WhatsApp membership lookup returned no usable data; skipped to avoid a duplicate join. Retry later."};
+   }
+  } catch(checkError) {
+   return {code,status:"failed",message:"Could not verify group membership with WhatsApp; skipped to avoid a duplicate join. Retry later."};
+  }
+  const groupId=inviteInfo.id;
+  if(Object.prototype.hasOwnProperty.call(participating,groupId))
+   return {code,status:"already_joined",message:"Already a member; skipped without joining again",groupId};
   if(typeof sock.groupAcceptInvite!=="function")return {code,status:"failed",message:"Joining by invite link is not supported by this WhatsApp library version"};
   const result=await sock.groupAcceptInvite(code);
   return result?{code,status:"joined",message:"Joined successfully"}:{code,status:"failed",message:"WhatsApp did not confirm the join"};
@@ -1593,7 +1598,17 @@ function startJoinAllJob(id) {
  const job={state:"running",current:0,total:0,joined:0,alreadyJoined:0,skipped:0,failed:0,cancelRequested:false,message:"Preparing shared group invites..."};
  joinAllJobs.set(id,job);
  (async()=>{
-  const groups=await listSharedJoinGroups();
+  let groups;
+  try {
+   groups=await listSharedJoinGroups();
+  } catch(loadError) {
+   // Keep a readable, retryable failed state instead of leaving progress at “Preparing”.
+   job.state="failed";
+   job.retryable=true;
+   job.message="Could not load the shared invite library. No groups were joined. Check the database connection and try Join All Groups again.";
+   job.error=String(loadError?.message||loadError).slice(0,200);
+   return;
+  }
   job.total=groups.length;
   if(job.cancelRequested) { job.state="stopped"; job.message="Joining stopped before the first group."; return; }
   if(!groups.length) { job.state="completed"; job.message="No shared group invite links are available to join."; return; }
@@ -1617,7 +1632,12 @@ function startJoinAllJob(id) {
    job.state="completed";
    job.message="Finished: "+job.joined+" joined, "+job.alreadyJoined+" already joined, "+job.skipped+" skipped, "+job.failed+" failed.";
   }
- })().catch(e=>{job.state="failed";job.message="Joining stopped because of an error: "+String(e?.message||e);});
+ })().catch(e=>{
+  job.state="failed";
+  job.retryable=true;
+  job.message="Join All Groups stopped because of an unexpected error. You can retry after checking the connection.";
+  job.error=String(e?.message||e).slice(0,200);
+ });
  return job;
 }
 app.post("/api/accounts/:accountId/join-groups/join-all",async(req,res)=>{
