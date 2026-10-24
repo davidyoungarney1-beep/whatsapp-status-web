@@ -954,6 +954,9 @@ Waiting
 Load Groups
 </button>
 
+<button type="button" class="danger" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')">Leave All Groups</button>
+<div id="leave-all-progress-${esc(x.id)}" class="post-result" style="display:none;margin-top:8px"></div>
+<button type="button" class="gray" id="stop-leave-all-${esc(x.id)}" onclick="stopLeaveAllGroups('${x.id}')" style="display:none;margin:4px 0;width:100%">Stop Leaving Groups</button>
 
 <button
 class="gray"
@@ -1536,6 +1539,60 @@ e.message
 }
 
 
+
+async function confirmLeaveAllGroups(id){
+  const confirmed=confirm("Leave ALL WhatsApp groups for this connected account?\n\nThis affects only this account. You may need new invitations to rejoin groups. Any groups successfully left will be removed from this account's forwarding selection.\n\nContinue?");
+  if(!confirmed)return;
+  const button=document.getElementById("leave-all-btn-"+id);
+  const box=document.getElementById("leave-all-progress-"+id);
+  if(button){button.disabled=true;button.textContent="Starting...";}
+  if(box){box.style.display="block";box.className="post-result success";box.textContent="Starting Leave All Groups...";}
+  try{
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const data=await r.json();
+    if(!r.ok||!data.success)throw new Error(data.error||"Could not start Leave All Groups.");
+    await pollLeaveAllGroups(id);
+  }catch(error){
+    if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not leave groups.";}
+  }finally{
+    if(button){button.disabled=false;button.textContent="Leave All Groups";}
+  }
+}
+
+async function pollLeaveAllGroups(id){
+  const button=document.getElementById("leave-all-btn-"+id);
+  const box=document.getElementById("leave-all-progress-"+id);
+  if(button){button.disabled=true;button.textContent="Leaving Groups...";}
+  const stopButton=document.getElementById("stop-leave-all-"+id);
+  if(stopButton)stopButton.style.display="block";
+  let terminal=false;
+  try{
+    while(!terminal){
+      const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups/progress",{cache:"no-store"});
+      const data=await r.json();
+      if(!r.ok||!data.success)throw new Error(data.error||"Could not read leave progress.");
+      const p=data.progress||{};
+      if(box){
+        box.style.display="block";
+        box.className="post-result "+(["failed"].includes(p.state)?"error":(["completed","partial","stopped"].includes(p.state)?(p.state==="failed"?"error":"success"):"success"));
+        box.textContent=(p.message||"Working...")+(p.total?" Progress: "+(p.current||0)+"/"+p.total+"; left "+(p.left||0)+"; failed "+(p.failed||0)+".":"");
+      }
+      terminal=["completed","partial","failed","stopped"].includes(p.state);
+      if(!terminal)await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    await groups(id).catch(()=>{});
+  }catch(error){
+    if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not check leave progress.";}
+  }finally{
+    if(button){button.disabled=false;button.textContent="Leave All Groups";}
+    if(stopButton)stopButton.style.display="none";
+  }
+}
+
+async function stopLeaveAllGroups(id){
+  try{await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups/stop",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});}
+  catch(error){alert(error.message||"Could not stop the task.");}
+}
 
 async function stopForwarding(id){
   const button=document.getElementById("stop-forwarding-"+id);

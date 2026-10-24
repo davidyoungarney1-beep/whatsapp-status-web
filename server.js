@@ -161,6 +161,7 @@ const directStatusEchoes = new Map();
 
 let accountsCache = [];
 const joinAllJobs = new Map();
+const leaveAllJobs = new Map();
 function parseWhatsAppInvite(value) {
   const match = String(value || "").trim().match(/(?:https?:\/\/)?(?:www\.)?chat\.whatsapp\.com\/([A-Za-z0-9_-]+)/i);
   return match ? { code: match[1], link: "https://chat.whatsapp.com/" + match[1] } : null;
@@ -1829,6 +1830,66 @@ app.post("/api/accounts/:accountId/join-groups/stop",(req,res)=>{
  res.json({success:true,stopped:true,message:job.message});
 });
 app.get("/api/accounts/:accountId/join-groups/progress",(req,res)=>res.json({success:true,progress:joinAllJobs.get(req.params.accountId)||{state:"idle",message:"No Join All Groups task is running"}}));
+
+function startLeaveAllJob(id) {
+ const account=readAccounts().find(a=>a.id===id), conn=connections.get(id);
+ const old=leaveAllJobs.get(id);
+ if(old?.state==="running") return old;
+ const fail=(message)=>{const job={state:"failed",current:0,total:0,left:0,failed:0,cancelRequested:false,message};leaveAllJobs.set(id,job);return job;};
+ if(!account) return fail("Account not found.");
+ if(!conn?.connected||!conn?.sock) return fail("Connect this WhatsApp account before leaving groups.");
+ if(joinAllJobs.get(id)?.state==="running") return fail("Stop Join All Groups and wait for it to finish before leaving groups.");
+ if(conn.forwardingStatus?.state==="forwarding") return fail("Forwarding is currently running. Stop forwarding and try again so the group list does not change mid-task.");
+ if(typeof conn.sock.groupFetchAllParticipating!=="function"||typeof conn.sock.groupLeave!=="function") return fail("This WhatsApp connection does not support listing or leaving groups.");
+ const job={state:"running",current:0,total:0,left:0,failed:0,cancelRequested:false,message:"Loading groups from this WhatsApp account...",errors:[]};
+ leaveAllJobs.set(id,job);
+ (async()=>{
+  const leftIds=new Set();
+  try {
+   const groups=await withTimeout(()=>conn.sock.groupFetchAllParticipating(),15000,"Loading groups timed out. No groups were left.");
+   const list=Object.values(groups||{}).filter(g=>g?.id);
+   job.total=list.length;
+   if(!list.length){job.state="completed";job.message="This account is not currently a member of any groups.";return;}
+   for(const group of list){
+    if(job.cancelRequested) break;
+    job.current++;
+    const name=String(group.subject||group.name||group.id);
+    job.message=`Leaving group ${job.current}/${job.total}: ${name}`;
+    try {
+     await withTimeout(()=>conn.sock.groupLeave(group.id),15000,"Leaving this group timed out.");
+     leftIds.add(group.id); job.left++;
+    } catch(error) {
+     job.failed++;
+     if(job.errors.length<8) job.errors.push({group:name,message:String(error?.message||error).slice(0,140)});
+    }
+    // Pace requests to reduce the chance of triggering WhatsApp rate limits.
+    if(!job.cancelRequested && job.current<job.total) await new Promise(resolve=>setTimeout(resolve,650));
+   }
+   const latest=readAccounts().find(a=>a.id===id);
+   if(latest) updateAccount(id,{selectedGroups:(latest.selectedGroups||[]).filter(groupId=>!leftIds.has(groupId))});
+   if(job.cancelRequested){job.state="stopped";job.message=`Stopped. Left ${job.left} of ${job.total} groups; ${job.failed} failed. Remaining group selections were preserved.`;}
+   else if(job.failed){job.state=job.left?"partial":"failed";job.message=`Finished with ${job.left} groups left and ${job.failed} failures out of ${job.total}. Failed groups remain selected if they were previously selected.`;}
+   else {job.state="completed";job.message=`Successfully left all ${job.left} groups for this WhatsApp account. Forwarding selections for those groups were cleared.`;}
+  } catch(error){
+   job.state="failed"; job.message=String(error?.message||error||"Could not leave groups.").slice(0,220);
+  }
+ })();
+ return job;
+}
+app.post("/api/accounts/:accountId/leave-all-groups",(req,res)=>{
+ const id=req.params.accountId;
+ if(!readAccounts().some(a=>a.id===id)) return res.status(404).json({success:false,error:"Account not found"});
+ const job=startLeaveAllJob(id);
+ if(job.state==="failed") return res.status(400).json({success:false,error:job.message,progress:job});
+ res.json({success:true,message:"Leave All Groups started",progress:job});
+});
+app.post("/api/accounts/:accountId/leave-all-groups/stop",(req,res)=>{
+ const job=leaveAllJobs.get(req.params.accountId);
+ if(!job||job.state!=="running") return res.json({success:true,stopped:false,message:"No Leave All Groups task is running."});
+ job.cancelRequested=true; job.message="Stop requested. The current group operation will finish, then no more groups will be left.";
+ res.json({success:true,stopped:true,message:job.message});
+});
+app.get("/api/accounts/:accountId/leave-all-groups/progress",(req,res)=>res.json({success:true,progress:leaveAllJobs.get(req.params.accountId)||{state:"idle",message:"No Leave All Groups task is running"}}));
 
 /*
 |--------------------------------------------------------------------------
