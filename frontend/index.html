@@ -1672,12 +1672,7 @@ d.error||"Save failed"
 }
 
 
-alert(
-selected.length+
-" group"+
-(selected.length===1?"":"s")+
-" saved successfully. Shared invites are being published and automatic joining has started. Check the Add WhatsApp Group / Join Groups panel for progress."
-);
+alert(d.message || (selected.length+" groups saved. No groups were joined."));
 
 
 /*
