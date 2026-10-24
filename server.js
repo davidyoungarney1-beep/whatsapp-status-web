@@ -1654,6 +1654,7 @@ function startJoinAllJob(id) {
    else if(result.status==="skipped")job.skipped++;
    else job.failed++;
    job.lastResult={...result,name:g.name||"WhatsApp Group"};
+   if(result.status==="pending_approval") job.message="Request Sent — Awaiting Admin Approval: "+(g.name||"WhatsApp Group")+" ("+job.current+"/"+job.total+")";
    if(job.cancelRequested) break;
    await new Promise(resolve=>setTimeout(resolve,1800));
   }
