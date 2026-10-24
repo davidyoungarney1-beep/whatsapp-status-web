@@ -935,7 +935,7 @@ Waiting
 <div class="post-mode-panel">
   <b>Choose How to Post</b>
   <div class="mode-options">
-    <button type="button" class="mode-option" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>\n    <button type="button" class="mode-option active" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
+    <button type="button" class="mode-option active" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>\n    <button type="button" class="mode-option" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
   </div>
   <div id="mode-direct-${x.id}" style="display:none">
     <label for="link-url-${x.id}"><b>WhatsApp Status text + link</b></label>
@@ -1908,7 +1908,7 @@ Waiting
 Load Groups
 </button>
 
-<button type="button" class="leave-all-button" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')">✕<br>Remove All Groups</button>
+<button type="button" class="leave-all-button" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Remove All Groups</span></button>
 <div id="leave-all-progress-${esc(x.id)}" class="post-result" style="display:none;margin-top:8px"></div>
 <button type="button" class="gray" id="stop-leave-all-${esc(x.id)}" onclick="stopLeaveAllGroups('${x.id}')" style="display:none;margin:4px 0;width:100%">Stop Leaving Groups</button>
 
