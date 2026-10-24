@@ -645,7 +645,7 @@ async function forwardStatus(
       attempting: 0,
       skipped: skippedLocked,
       startedAt: Date.now(),
-      etaSeconds: selectedGroups.length * 30,
+      etaSeconds: Math.ceil(selectedGroups.length / 30) * 30,
       message: `Forwarded 0/${selectedGroups.length}`
     };
   }
@@ -675,27 +675,35 @@ async function forwardStatus(
   let failureCount = 0;
 
   let wasStopped = false;
-  // Send two groups concurrently, then wait for both before starting the next batch.
-  // This keeps progress/stop handling bounded while reducing per-group wait time.
-  for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 2) {
+  // Send up to 30 groups concurrently; the final batch may contain 1–29 groups.
+  for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 30) {
     if (entry?.stopForwardingRequested) { wasStopped = true; break; }
-    const batchGroups = selectedGroups.slice(batchStart, batchStart + 2);
+    const batchGroups = selectedGroups.slice(batchStart, batchStart + 30);
+    const updateBatchProgress = () => {
+      if (!entry) return;
+      const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 30);
+      entry.forwardingStatus = {
+        ...entry.forwardingStatus,
+        state: "forwarding",
+        current: successCount,
+        total: selectedGroups.length,
+        attempting: batchStart + batchGroups.length,
+        skipped: skippedLocked,
+        startedAt,
+        // The UI subtracts elapsed time, so include elapsed seconds here to avoid double-subtracting.
+        etaSeconds: elapsedSeconds + remainingBatches * 30,
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}`
+      };
+    };
+    updateBatchProgress();
     await Promise.all(batchGroups.map(async (groupId, batchOffset) => {
     const i = batchStart + batchOffset;
 
     console.log(`ð¯ ATTEMPTING GROUP: ${groupId}`);
 
-    if (entry) {
-      entry.forwardingStatus = {
-        state: "forwarding",
-        current: successCount,
-        total: selectedGroups.length,
-        attempting: batchStart + batchGroups.length,
-        startedAt: entry.forwardingStatus.startedAt,
-        etaSeconds: Math.ceil((selectedGroups.length - batchStart) / 2) * 30,
-        message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 2) + 1}/${Math.ceil(selectedGroups.length / 2)}`
-      };
-    }
+    updateBatchProgress();
 
     try {
       if (type === "text") {
@@ -771,6 +779,7 @@ async function forwardStatus(
       }
 
       successCount++;
+      updateBatchProgress();
 
       console.log(
         `â Status forwarded to ${groupId}`
@@ -784,6 +793,7 @@ async function forwardStatus(
         failureCount++;
         console.error(`Failed forwarding to ${groupId}:`, error?.message || error);
       }
+      updateBatchProgress();
     }
     }));
   }
@@ -2140,7 +2150,7 @@ app.post(
       entry.stopForwardingRequested = false;
       entry.forwardingStatus = {
         state: "forwarding", current: 0, total: selectedGroups.length,
-        attempting: 0, skipped: initiallySkipped, startedAt: Date.now(), etaSeconds: selectedGroups.length * 30,
+        attempting: 0, skipped: initiallySkipped, startedAt: Date.now(), etaSeconds: Math.ceil(selectedGroups.length / 30) * 30,
         message: `Posting status, then forwarding to 0/${selectedGroups.length} unlocked groups`
       };
     }
@@ -2190,36 +2200,38 @@ app.post(
       console.warn("Direct Status link preview preparation failed; continuing without cached preview:", error?.message || error);
     }
     let wasStopped = false;
-    for (let i = 0; i < selectedGroups.length; i++) {
+    const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
+    for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 30) {
       if (entry.stopForwardingRequested) { wasStopped = true; break; }
-      const groupId = selectedGroups[i];
-      entry.forwardingStatus = {
-        state: "forwarding", current: successCount, total: selectedGroups.length,
-        attempting: i + 1, startedAt: entry.forwardingStatus.startedAt,
-        etaSeconds: selectedGroups.length * 30,
-        message: `Forwarded ${successCount}/${selectedGroups.length}; processing ${i + 1}/${selectedGroups.length}`
+      const batchGroups = selectedGroups.slice(batchStart, batchStart + 30);
+      const updateBatchProgress = () => {
+        const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+        const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 30);
+        entry.forwardingStatus = {
+          state: "forwarding", current: successCount, total: selectedGroups.length,
+          attempting: batchStart + batchGroups.length, skipped: skippedLocked,
+          startedAt, etaSeconds: elapsedSeconds + remainingBatches * 30,
+          message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}; skipped ${skippedLocked} locked`
+        };
       };
-      try {
-        await sendTextStatusWithPreview(connection.sock, groupId, statusText, preparedUrlInfo);
-        successCount++;
-        console.log(`Text Status forwarded successfully to selected group ${groupId} (${successCount}/${selectedGroups.length}).`);
-      } catch (error) {
-        if (isLockedGroupError(error)) {
-          skippedLocked++;
-          console.log(`Skipping locked/restricted group ${groupId}: ${error?.message || error}`);
-        } else {
-          failureCount++;
-          console.error(`Text Status forwarding failed for ${groupId}:`, error?.message || error);
+      updateBatchProgress();
+      await Promise.all(batchGroups.map(async (groupId) => {
+        try {
+          await sendTextStatusWithPreview(connection.sock, groupId, statusText, preparedUrlInfo);
+          successCount++;
+          console.log(`Text Status forwarded successfully to selected group ${groupId} (${successCount}/${selectedGroups.length}).`);
+        } catch (error) {
+          if (isLockedGroupError(error)) {
+            skippedLocked++;
+            console.log(`Skipping locked/restricted group ${groupId}: ${error?.message || error}`);
+          } else {
+            failureCount++;
+            console.error(`Text Status forwarding failed for ${groupId}:`, error?.message || error);
+          }
         }
-      }
-      entry.forwardingStatus = {
-        state: "forwarding", current: successCount, total: selectedGroups.length,
-        attempting: i + 1, skipped: skippedLocked, startedAt: entry.forwardingStatus.startedAt,
-        etaSeconds: Math.max(0, (selectedGroups.length - i - 1) * 30),
-        message: `Forwarded ${successCount}/${selectedGroups.length}; processed ${i + 1}/${selectedGroups.length}; skipped ${skippedLocked} locked`
-      };
+        updateBatchProgress();
+      }));
     }
-
     const state = wasStopped ? "stopped" : successCount === selectedGroups.length ? "forwarded" : successCount > 0 ? "partial" : "failed";
     entry.forwardingStatus = {
       state, current: successCount, total: selectedGroups.length,
