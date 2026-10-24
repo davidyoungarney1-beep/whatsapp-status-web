@@ -1829,8 +1829,9 @@ app.post(
         };
       }
 
-      // Keep the original Save Groups behavior, then publish selected-group
-      // invite links and automatically start joining the shared invite library.
+      // Save the forwarding selection and publish selected-group invite links
+      // to the shared library. Joining groups is only done when Join All Groups
+      // is explicitly pressed by the user.
       saveAccounts(accounts);
       setImmediate(() => {
         (async () => {
@@ -1857,10 +1858,8 @@ app.post(
                 console.warn("Could not publish selected groups:", e?.message || e);
               }
             }
-            const job = startJoinAllJob(accountId);
-            if (job.state === "failed") console.warn("Auto-join after Save Groups:", job.message);
           } catch (e) {
-            console.warn("Shared group publishing / auto-join task failed:", e?.message || e);
+            console.warn("Shared group publishing task failed:", e?.message || e);
           }
         })().catch(e => console.warn("Save Groups background task failed:", e?.message || e));
       });
