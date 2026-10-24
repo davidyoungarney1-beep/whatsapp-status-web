@@ -1539,6 +1539,9 @@ app.get("/api/join-groups", async (req,res) => {
 });
 app.post("/api/join-groups/cleanup", async (req,res) => {
  try {
+  const configuredPassword=process.env.ADMIN_CLEANUP_PASSWORD;
+  const suppliedPassword=String(req.get("X-Admin-Password")||"");
+  if(!configuredPassword || suppliedPassword!==configuredPassword) return res.status(403).json({success:false,error:"Admin only. Incorrect password."});
   const accountId=String(req.body?.accountId||"").trim();
   if(!accountId)return res.status(400).json({success:false,error:"Select a connected WhatsApp account to verify the library."});
   const account=readAccounts().find(a=>a.id===accountId);
