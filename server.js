@@ -1537,6 +1537,50 @@ app.get("/api/join-groups", async (req,res) => {
  try { const groups=await listSharedJoinGroups(); res.json({success:true,groups:groups.map(g=>({id:g.code||g._id,code:g.code||g._id,link:g.link,name:g.name||"WhatsApp Group"}))}); }
  catch(e){res.status(500).json({success:false,error:e.message||"Could not load shared groups"});}
 });
+app.post("/api/join-groups/cleanup", async (req,res) => {
+ try {
+  const accountId=String(req.body?.accountId||"").trim();
+  if(!accountId)return res.status(400).json({success:false,error:"Select a connected WhatsApp account to verify the library."});
+  const account=readAccounts().find(a=>a.id===accountId);
+  const conn=connections.get(accountId);
+  if(!account||!conn?.connected||!conn?.sock)return res.status(400).json({success:false,error:"The selected WhatsApp account is not connected. Connect it before cleaning the library."});
+  if(typeof conn.sock.groupGetInviteInfo!=="function")return res.status(400).json({success:false,error:"This WhatsApp connection cannot verify invite links."});
+  // First remove legacy duplicate entries, then verify every remaining link with WhatsApp.
+  await listSharedJoinGroups();
+  const collection=mongoDb.collection("join_groups");
+  const rows=await collection.find({}).sort({addedAt:-1}).toArray();
+  let checked=0,kept=0,removed=0;
+  const results=[];
+  for(const row of rows) {
+   const parsed=parseWhatsAppInvite(row.link||row.code||row._id);
+   if(!parsed) {
+    await collection.deleteOne({_id:row._id}); removed++;
+    results.push({name:row.name||"Unknown link",status:"removed",reason:"Malformed or unrecognized WhatsApp invite URL"});
+    continue;
+   }
+   checked++;
+   try {
+    const inviteInfo=await conn.sock.groupGetInviteInfo(parsed.code);
+    if(inviteInfo?.id) {
+     kept++;
+     await collection.updateOne({_id:row._id},{$set:{code:parsed.code,link:parsed.link,verifiedAt:new Date(),verifiedBy:accountId,name:row.name||inviteInfo.subject||inviteInfo.name||"WhatsApp Group"}});
+     results.push({name:row.name||inviteInfo.subject||inviteInfo.name||"WhatsApp Group",status:"kept",reason:"Verified active by WhatsApp"});
+    } else {
+     await collection.deleteOne({_id:row._id}); removed++;
+     results.push({name:row.name||"WhatsApp Group",status:"removed",reason:"WhatsApp did not confirm this invite"});
+    }
+   } catch(verifyError) {
+    await collection.deleteOne({_id:row._id}); removed++;
+    results.push({name:row.name||"WhatsApp Group",status:"removed",reason:"Could not verify this invite with WhatsApp"});
+   }
+   await new Promise(resolve=>setTimeout(resolve,300));
+  }
+  res.json({success:true,checked,kept,removed,results,message:`Library cleanup complete: checked ${checked} links, kept ${kept} verified links, removed ${removed} inactive/unverified links.`});
+ } catch(error) {
+  res.status(500).json({success:false,error:error?.message||"Could not clean the invite library"});
+ }
+});
+
 app.post("/api/join-groups", async (req,res) => {
  try {
   const rawLinks=Array.isArray(req.body?.links)?req.body.links:[req.body?.link||req.body?.url].filter(Boolean);
