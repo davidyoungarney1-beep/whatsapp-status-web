@@ -1710,4 +1710,15 @@ try{
 
 const r=await fetch(
 API+"/api/accounts/"
-+en
++encodeURIComponent(id),{method:"DELETE"});
+    const d=await r.json();
+    if(!r.ok) throw Error(d.error||"Could not remove account");
+    await loadAccounts();
+  }catch(e){
+    alert(e.message||"Could not remove account");
+  }
+}
+
+</script>
+</body>
+</html>
