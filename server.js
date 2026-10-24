@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import pino from "pino";
 import fs from "fs";
+import { randomUUID } from "node:crypto";
 import path from "path";
 import { MongoClient } from "mongodb";
 import { useMongoAuthState } from "./mongo-auth.js";
@@ -83,6 +84,78 @@ const pairingWaiters = new Map();
 const reconnecting = new Set();
 // Prevent concurrent requests/reconnect timers from opening multiple sockets for one saved account.
 const connectionStarts = new Map();
+const SOCKET_LEASE_MS = 30000;
+const SOCKET_LEASE_RENEW_MS = 8000;
+const instanceOwner = `${process.env.RENDER_INSTANCE_ID || process.env.HOSTNAME || "whatsapp-status-web"}:${process.pid}:${randomUUID()}`;
+const socketLeaseTimers = new Map();
+const socketRetryTimers = new Map();
+let shuttingDown = false;
+
+async function acquireSocketLease(accountId) {
+  const collection = mongoDb.collection("whatsapp_socket_locks");
+  const now = new Date();
+  try {
+    const result = await collection.updateOne(
+      { _id: accountId, $or: [{ owner: instanceOwner }, { leaseUntil: { $lte: now } }] },
+      { $set: { owner: instanceOwner, leaseUntil: new Date(now.getTime() + SOCKET_LEASE_MS), updatedAt: now } },
+      { upsert: true }
+    );
+    return result.matchedCount === 1 || result.upsertedCount === 1;
+  } catch (error) {
+    if (error?.code === 11000) return false; // Another instance owns the live lease.
+    throw error;
+  }
+}
+
+async function releaseSocketLease(accountId) {
+  const timer = socketLeaseTimers.get(accountId);
+  if (timer) clearInterval(timer);
+  socketLeaseTimers.delete(accountId);
+  if (mongoDb) {
+    await mongoDb.collection("whatsapp_socket_locks").deleteOne({ _id: accountId, owner: instanceOwner });
+  }
+}
+
+function startSocketLeaseHeartbeat(accountId) {
+  if (socketLeaseTimers.has(accountId)) return;
+  const timer = setInterval(async () => {
+    try {
+      const now = new Date();
+      const result = await mongoDb.collection("whatsapp_socket_locks").updateOne(
+        { _id: accountId, owner: instanceOwner },
+        { $set: { leaseUntil: new Date(now.getTime() + SOCKET_LEASE_MS), updatedAt: now } }
+      );
+      if (result.matchedCount !== 1) {
+        clearInterval(timer);
+        socketLeaseTimers.delete(accountId);
+        const current = connections.get(accountId);
+        if (current) {
+          current.leaseLost = true;
+          if (connections.get(accountId) === current) connections.delete(accountId);
+          try { current.sock?.end?.(new Error("WhatsApp session lease was lost to another server instance")); } catch {}
+        }
+        scheduleSocketRetry(readAccounts().find(item => item.id === accountId), 10000);
+      }
+    } catch (error) {
+      console.warn("WhatsApp session lease heartbeat failed:", error?.message || error);
+    }
+  }, SOCKET_LEASE_RENEW_MS);
+  timer.unref?.();
+  socketLeaseTimers.set(accountId, timer);
+}
+
+function scheduleSocketRetry(account, delay = 10000) {
+  if (!account || shuttingDown || socketRetryTimers.has(account.id)) return;
+  const timer = setTimeout(async () => {
+    socketRetryTimers.delete(account.id);
+    if (shuttingDown || !readAccounts().some(item => item.id === account.id)) return;
+    try { await connectWhatsApp(account, null); }
+    catch (error) { console.warn(`WhatsApp reconnect retry failed for ${account.phone}:`, error?.message || error); }
+  }, delay);
+  timer.unref?.();
+  socketRetryTimers.set(account.id, timer);
+}
+
 const directStatusEchoes = new Map();
 
 
@@ -765,6 +838,7 @@ async function getCurrentWhatsAppVersion() {
 }
 
 function connectWhatsApp(account, phoneForPairing = null) {
+  if (shuttingDown) return Promise.resolve(null);
   const pending = connectionStarts.get(account.id);
   if (pending) {
     if (phoneForPairing) return pending.then(() => connectWhatsAppInternal(account, phoneForPairing));
@@ -865,24 +939,32 @@ async function connectWhatsAppInternal(
     statusRecipients: new Set()
   };
 
-  connections.set(
-    account.id,
-    entry
-  );
-
   const waVersion = await getCurrentWhatsAppVersion();
-  const sock =
-    makeWASocket({
+  const ownsLease = await acquireSocketLease(account.id);
+  if (!ownsLease) {
+    console.log(`WhatsApp session ${account.id} is owned by another live server instance; will retry safely.`);
+    scheduleSocketRetry(account, 10000);
+    return null;
+  }
+
+  connections.set(account.id, entry);
+  startSocketLeaseHeartbeat(account.id);
+  let sock;
+  try {
+    sock = makeWASocket({
       version: waVersion,
       logger,
       auth: state,
-      browser:
-        Browsers.windows("Chrome"),
+      browser: Browsers.windows("Chrome"),
       markOnlineOnConnect: false,
       syncFullHistory: false
     });
-
-  entry.sock = sock;
+    entry.sock = sock;
+  } catch (error) {
+    if (connections.get(account.id) === entry) connections.delete(account.id);
+    await releaseSocketLease(account.id).catch(() => {});
+    throw error;
+  }
 
   const cacheStatusContacts = (contacts = []) => {
     for (const contact of contacts || []) {
@@ -1046,8 +1128,9 @@ async function connectWhatsAppInternal(
             ?.statusCode;
 
         const shouldReconnect =
-          statusCode !==
-          DisconnectReason.loggedOut;
+          statusCode !== DisconnectReason.loggedOut &&
+          !shuttingDown &&
+          !entry.leaseLost;
 
         console.log(
           `â ï¸ WhatsApp disconnected: ${account.id}`
@@ -1087,8 +1170,9 @@ async function connectWhatsAppInternal(
               }
             }, 3000);
           }
-        } else if (connections.get(account.id) === entry) {
-          connections.delete(account.id);
+        } else {
+          if (connections.get(account.id) === entry) connections.delete(account.id);
+          if (!shuttingDown) releaseSocketLease(account.id).catch(error => console.warn("Could not release WhatsApp session lease:", error?.message || error));
         }
       }
     }
@@ -1539,7 +1623,7 @@ app.get(
 );
 
 
-app.delete("/api/accounts/:accountId", async (req,res) => { const id=req.params.accountId; try { const accounts=readAccounts(); const account=accounts.find(a=>a.id===id); if(!account) return res.status(404).json({success:false,error:"Account not found"}); try { await connections.get(id)?.sock?.logout(); } catch {} connections.delete(id); pairingWaiters.delete(id); reconnecting.delete(id); await mongoDb.collection("whatsapp_auth_creds").deleteMany({accountId:id}); await mongoDb.collection("whatsapp_auth_keys").deleteMany({accountId:id}); saveAccounts(accounts.filter(a=>a.id!==id)); res.json({success:true,message:"Account removed successfully"}); } catch(error) { console.error("â Remove account error:",error); res.status(500).json({success:false,error:"Failed to remove account"}); } });
+app.delete("/api/accounts/:accountId", async (req,res) => { const id=req.params.accountId; try { const accounts=readAccounts(); const account=accounts.find(a=>a.id===id); if(!account) return res.status(404).json({success:false,error:"Account not found"}); try { await connections.get(id)?.sock?.logout(); } catch {} connections.delete(id); pairingWaiters.delete(id); reconnecting.delete(id); const retry=socketRetryTimers.get(id); if(retry)clearTimeout(retry); socketRetryTimers.delete(id); await releaseSocketLease(id); await mongoDb.collection("whatsapp_auth_creds").deleteMany({accountId:id}); await mongoDb.collection("whatsapp_auth_keys").deleteMany({accountId:id}); saveAccounts(accounts.filter(a=>a.id!==id)); res.json({success:true,message:"Account removed successfully"}); } catch(error) { console.error("â Remove account error:",error); res.status(500).json({success:false,error:"Failed to remove account"}); } });
 
 
 /* SHARED ADD GROUP / JOIN GROUPS */
@@ -2223,6 +2307,31 @@ async function startServer() {
 
     process.exit(1);
   }
+}
+
+async function shutdownServer() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  for (const timer of socketRetryTimers.values()) clearTimeout(timer);
+  socketRetryTimers.clear();
+  for (const timer of socketLeaseTimers.values()) clearInterval(timer);
+  socketLeaseTimers.clear();
+  for (const entry of connections.values()) {
+    try { entry.sock?.end?.(new Error("Server shutting down for deployment")); } catch {}
+  }
+  try {
+    if (mongoDb) await mongoDb.collection("whatsapp_socket_locks").deleteMany({ owner: instanceOwner });
+  } catch (error) {
+    console.warn("Could not release WhatsApp session leases during shutdown:", error?.message || error);
+  }
+  try { await mongoClient.close(); } catch {}
+}
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, () => {
+    shutdownServer().finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
 }
 
 startServer();
