@@ -958,7 +958,7 @@ Waiting
 Load Groups
 </button>
 
-<button type="button" class="leave-all-button" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Remove All Groups</span></button>
+<button type="button" class="leave-all-button" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Removed from All Groups</span></button>
 <div id="leave-all-progress-${esc(x.id)}" class="post-result" style="display:none;margin-top:8px"></div>
 <button type="button" class="gray" id="stop-leave-all-${esc(x.id)}" onclick="stopLeaveAllGroups('${x.id}')" style="display:none;margin:4px 0;width:100%">Stop Leaving Groups</button>
 
@@ -1559,7 +1559,7 @@ async function confirmLeaveAllGroups(id){
   }catch(error){
     if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not leave groups.";}
   }finally{
-    if(button){button.disabled=false;button.innerHTML="<span>✕</span><span>Remove All Groups</span>";}
+    if(button){button.disabled=false;button.innerHTML="<span>✕</span><span>Removed from All Groups</span>";}
   }
 }
 
@@ -1588,7 +1588,7 @@ async function pollLeaveAllGroups(id){
   }catch(error){
     if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not check leave progress.";}
   }finally{
-    if(button){button.disabled=false;button.innerHTML="<span>✕</span><span>Remove All Groups</span>";}
+    if(button){button.disabled=false;button.innerHTML="<span>✕</span><span>Removed from All Groups</span>";}
     if(stopButton)stopButton.style.display="none";
   }
 }
