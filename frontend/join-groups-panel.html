@@ -13,6 +13,57 @@ window.sjWatchAccount=async function(accountId){var s=el("sj-account");if(accoun
 window.sjStop=async function(){var id=el("sj-account").value,b=el("sj-stop");if(!id)return; b.disabled=true;b.textContent="Stopping...";try{var r=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/join-groups/stop",{method:"POST"}),d=await r.json();if(!r.ok||!d.success)throw Error(d.error||"Could not stop joining");el("sj-progress").textContent=d.message||"Stop requested";window.sjWatchAccount(id);}catch(e){el("sj-progress").textContent=e.message;b.disabled=false;b.textContent="Stop Joining Groups"}};
 window.sjCleanup=async function(){var id=el("sj-account").value,b=el("sj-cleanup");if(!id){el("sj-progress").textContent="Select a connected WhatsApp account first";return}var password=prompt("ADMIN ONLY\nEnter the admin password to clean inactive/unverified links:");if(password===null)return;if(!password){el("sj-progress").textContent="Admin password is required";return}if(!confirm("Admin only: verify every shared invite link and permanently remove links that are invalid or cannot be verified?"))return;b.disabled=true;b.textContent="Checking links...";el("sj-progress").textContent="Checking shared invite links with WhatsApp. Keep this page open...";try{var r=await fetch(api+"/api/join-groups/cleanup",{method:"POST",headers:{"Content-Type":"application/json","X-Admin-Password":password},body:JSON.stringify({accountId:id})}),d=await r.json();if(!r.ok||!d.success)throw Error(d.error||"Library cleanup failed");el("sj-progress").textContent=d.message||("Cleanup complete: "+d.kept+" verified links kept; "+d.removed+" removed.");await sjLoad()}catch(e){el("sj-progress").textContent=e.message}finally{b.disabled=false;b.textContent="Clean Inactive/Unverified Links"}};
 window.sjJoinAll=async function(){var id=el("sj-account").value;if(!id){el("sj-progress").textContent="Connect a WhatsApp account first";return}try{var r=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/join-groups/join-all",{method:"POST"}),d=await r.json();if(!r.ok||!d.success)throw Error(d.error||"Could not start");window.sjWatchAccount(id)}catch(e){el("sj-progress").textContent=e.message}};
+// Keep the existing Save Groups workflow (forwarding selection + verified shared-library publishing)
+// and display its results beside the account's group list. This intentionally does NOT join groups.
+window.sjRenderSaveStats=function(accountId,data,selected){
+  var host=document.getElementById("g-"+accountId);
+  if(!host)return;
+  var old=document.getElementById("save-groups-stats-"+accountId);
+  if(old)old.remove();
+  var card=document.createElement("div");
+  card.id="save-groups-stats-"+accountId;
+  card.style.cssText="margin:14px 0;padding:14px;border:1px solid #cfe2d8;border-radius:10px;background:#f5fbf7;color:#173d31";
+  var results=Array.isArray(data.results)?data.results:[];
+  var rows=results.map(function(item){
+    var status=String(item.status||"checked");
+    var label=status==="added"?"Added to shared library":status==="duplicate"?"Duplicate ignored":status==="unverified"?"Unverified — not added":status==="already_exists"?"Already in library":"Checked";
+    var title=item.groupId||item.name||item.code||"WhatsApp group";
+    return "<div style=\\"padding:7px 0;border-top:1px solid #dcebe3;display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap\\"><span>"+esc(title)+"</span><b>"+esc(label)+"</b></div>";
+  }).join("");
+  card.innerHTML="<h3 style=\\"margin:0 0 10px\\">Save Groups — Statistics</h3>"+
+    "<div style=\\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px\\">"+
+    "<span><b>"+(selected||[]).length+"</b> selected</span>"+
+    "<span><b>"+Number(data.verified||0)+"</b> verified</span>"+
+    "<span><b>"+Number(data.added||0)+"</b> added</span>"+
+    "<span><b>"+Number(data.duplicates||0)+"</b> duplicates ignored</span>"+
+    "<span><b>"+Number(data.unverified||0)+"</b> unverified/not added</span></div>"+
+    "<div style=\\"font-size:13px;margin-bottom:8px\\">Forwarding selections were saved. Verified invite links were published to the shared library. No groups were joined.</div>"+
+    (rows||"<div>No per-group results were returned.</div>");
+  host.appendChild(card);
+};
+
+// Override the page handler after the main dashboard script has loaded, preserving its API contract.
+window.saveGroups=async function(id){
+  var boxes=document.querySelectorAll(".cg-"+id),selected=[];
+  boxes.forEach(function(box){if(box.checked)selected.push(box.value)});
+  var progress=el("sj-progress");
+  if(progress)progress.textContent="Saving forwarding selections and verifying selected group invite links...";
+  try{
+    var response=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/groups",{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({groups:selected})
+    });
+    var data=await response.json();
+    if(!response.ok||data.success===false)throw Error(data.error||"Save Groups failed");
+    if(typeof window.groups==="function")await window.groups(id);
+    window.sjRenderSaveStats(id,data,selected);
+    if(typeof window.sjLoad==="function")await window.sjLoad();
+    if(progress)progress.textContent=data.message||("Saved "+selected.length+" forwarding groups. Shared invites: "+Number(data.added||0)+" added, "+Number(data.duplicates||0)+" duplicates ignored, "+Number(data.unverified||0)+" unverified. No groups were joined.");
+  }catch(error){
+    if(progress)progress.textContent=error.message||"Could not save groups";
+    alert(error.message||"Could not save groups");
+  }
+};
+
 window.sjAccounts();
 window.sjLoad();
 })();
