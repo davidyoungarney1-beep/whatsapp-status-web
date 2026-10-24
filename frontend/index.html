@@ -942,14 +942,14 @@ Waiting
     <button type="button" class="mode-option active" id="mode-manual-btn-${x.id}" onclick="setPostingMode('${x.id}','manual')">Manual WhatsApp Status</button>
     <button type="button" class="mode-option" id="mode-direct-btn-${x.id}" onclick="setPostingMode('${x.id}','direct')">Website Direct (Text + Link)</button>
   </div>
-  <div id="mode-direct-${x.id}">
+  <div id="mode-direct-${x.id}" style="display:none">
     <label for="link-url-${x.id}"><b>WhatsApp Status text + link</b></label>
     <textarea id="link-url-${x.id}" rows="4" maxlength="700" placeholder="Write your status text, then include your link too..."></textarea>
     <button type="button" onclick="postLinkStatus('${x.id}')">Post Text to My Status</button>
     <div id="link-result-${x.id}" class="post-result"></div>
     <small>Direct mode supports plain text or links only. Photos and videos are excluded. Add text and a link together. A preview is requested and will appear when WhatsApp supports it. If Forwarding is ON, the bot will forward that status to your selected groups and skip locked groups.</small>
   </div>
-  <div id="mode-manual-${x.id}" style="display:none">
+  <div id="mode-manual-${x.id}" style="display:block">
     <div class="manual-mode-note"><b>Manual mode:</b> Open WhatsApp on your phone and post your text, photo, or video to your Status as usual. If Forwarding is ON, the bot will forward that status to your selected groups and skip locked groups.</div>
   </div>
 </div>
@@ -958,7 +958,7 @@ Waiting
 Load Groups
 </button>
 
-<button type="button" class="danger" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Remove All Groups</span></button>
+<button type="button" class="leave-all-button" id="leave-all-btn-${esc(x.id)}" onclick="confirmLeaveAllGroups('${x.id}')"><span>✕</span><span>Remove All Groups</span></button>
 <div id="leave-all-progress-${esc(x.id)}" class="post-result" style="display:none;margin-top:8px"></div>
 <button type="button" class="gray" id="stop-leave-all-${esc(x.id)}" onclick="stopLeaveAllGroups('${x.id}')" style="display:none;margin:4px 0;width:100%">Stop Leaving Groups</button>
 
@@ -1549,7 +1549,7 @@ async function confirmLeaveAllGroups(id){
   if(!confirmed)return;
   const button=document.getElementById("leave-all-btn-"+id);
   const box=document.getElementById("leave-all-progress-"+id);
-  if(button){button.disabled=true;button.textContent="Starting...";}
+  if(button){button.disabled=true;button.innerHTML="<span>✕</span><span>Starting...</span>";}
   if(box){box.style.display="block";box.className="post-result success";box.textContent="Starting Leave All Groups...";}
   try{
     const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/leave-all-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
@@ -1559,14 +1559,14 @@ async function confirmLeaveAllGroups(id){
   }catch(error){
     if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not leave groups.";}
   }finally{
-    if(button){button.disabled=false;button.textContent="Leave All Groups";}
+    if(button){button.disabled=false;button.innerHTML="<span>✕</span><span>Remove All Groups</span>";}
   }
 }
 
 async function pollLeaveAllGroups(id){
   const button=document.getElementById("leave-all-btn-"+id);
   const box=document.getElementById("leave-all-progress-"+id);
-  if(button){button.disabled=true;button.textContent="Leaving Groups...";}
+  if(button){button.disabled=true;button.innerHTML="<span>✕</span><span>Removing Groups...</span>";}
   const stopButton=document.getElementById("stop-leave-all-"+id);
   if(stopButton)stopButton.style.display="block";
   let terminal=false;
@@ -1588,7 +1588,7 @@ async function pollLeaveAllGroups(id){
   }catch(error){
     if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not check leave progress.";}
   }finally{
-    if(button){button.disabled=false;button.textContent="Leave All Groups";}
+    if(button){button.disabled=false;button.innerHTML="<span>✕</span><span>Remove All Groups</span>";}
     if(stopButton)stopButton.style.display="none";
   }
 }
