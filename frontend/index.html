@@ -487,7 +487,7 @@ Scan QR Code Instead
 <div id="qr-panel" class="qr-panel">
 <strong>Scan this code with WhatsApp</strong>
 <div id="qrcode" class="qr-code"></div>
-<small id="qr-instructions">Open WhatsApp Ã¢ÂÂ Linked devices Ã¢ÂÂ Link a device, then scan this QR code.</small>
+<small id="qr-instructions">Open WhatsApp → Linked devices → Link a device, then scan this QR code.</small>
 <button class="gray" onclick="hideQr()">Hide QR Code</button>
 </div>
 
@@ -502,7 +502,7 @@ Pairing Code
 </div>
 
 <small>
-WhatsApp Ã¢ÂÂ Linked Devices Ã¢ÂÂ Link a Device Ã¢ÂÂ Link with phone number
+WhatsApp → Linked Devices → Link a Device → Link with phone number
 </small>
 
 </div>
@@ -567,7 +567,7 @@ A pairing code will appear.
 Enter the code in WhatsApp through:
 <br><br>
 <strong>
-WhatsApp Ã¢ÂÂ Linked Devices Ã¢ÂÂ Link a Device Ã¢ÂÂ
+WhatsApp → Linked Devices → Link a Device →
 Link with phone number
 </strong>
 </li>
@@ -655,7 +655,7 @@ Before posting your WhatsApp Status, go to:
 <br><br>
 
 <strong>
-WhatsApp Ã¢ÂÂ Settings Ã¢ÂÂ Privacy Ã¢ÂÂ Status
+WhatsApp → Settings → Privacy → Status
 </strong>
 
 <br><br>
@@ -969,7 +969,7 @@ async function connectByQr(){
         lastQr=status.qr;
         qrBox.innerHTML="";
         new QRCode(qrBox,{text:status.qr,width:240,height:240,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
-        document.getElementById("qr-instructions").textContent="On your phone: WhatsApp Ã¢ÂÂ Linked devices Ã¢ÂÂ Link a device, then scan this code. Keep this page open.";
+        document.getElementById("qr-instructions").textContent="On your phone: WhatsApp → Linked devices → Link a device, then scan this code. Keep this page open.";
         message("QR code ready. Scan it with WhatsApp.","success");
       }
     }
@@ -1059,8 +1059,8 @@ ${esc(x.phone||"Unknown")}
 <div class="status ${x.connected?"connected":""}">
 
 ${x.connected
-?"Ã¢ÂÂ Connected"
-:"Ã¢ÂÂ Disconnected"}
+?"● Connected"
+:"○ Disconnected"}
 
 </div>
 
@@ -1085,7 +1085,7 @@ class="danger"
 onclick="removeAccount('${x.id}')"
 title="Remove account"
 >
-Ã¢ÂÂ
+✕
 </button>
 
 </div>
