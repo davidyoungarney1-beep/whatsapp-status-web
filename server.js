@@ -675,15 +675,27 @@ async function forwardStatus(
   let failureCount = 0;
 
   let wasStopped = false;
+  let completedBatchDurationMs = 0;
+  let completedBatchCount = 0;
   // Send up to 30 groups concurrently; the final batch may contain 1–29 groups.
   for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 30) {
     if (entry?.stopForwardingRequested) { wasStopped = true; break; }
     const batchGroups = selectedGroups.slice(batchStart, batchStart + 30);
+    const batchStartedAt = Date.now();
     const updateBatchProgress = () => {
       if (!entry) return;
       const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
       const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
       const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 30);
+      const averageBatchSeconds = completedBatchCount > 0
+        ? Math.max(5, completedBatchDurationMs / completedBatchCount / 1000)
+        : 30;
+      const processedInBatch = Math.min(batchGroups.length, Math.max(0,
+        successCount + failureCount + skippedLocked - groupCheck.skipped.length - batchStart));
+      const currentBatchRemaining = processedInBatch > 0
+        ? averageBatchSeconds * (batchGroups.length - processedInBatch) / batchGroups.length
+        : averageBatchSeconds;
+      const remainingSeconds = Math.max(0, currentBatchRemaining + Math.max(0, remainingBatches - 1) * averageBatchSeconds);
       entry.forwardingStatus = {
         ...entry.forwardingStatus,
         state: "forwarding",
@@ -692,8 +704,8 @@ async function forwardStatus(
         attempting: batchStart + batchGroups.length,
         skipped: skippedLocked,
         startedAt,
-        // The UI subtracts elapsed time, so include elapsed seconds here to avoid double-subtracting.
-        etaSeconds: elapsedSeconds + remainingBatches * 30,
+        // The UI subtracts elapsed time; estimate remaining time from observed batch speed.
+        etaSeconds: elapsedSeconds + Math.ceil(remainingSeconds),
         message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}`
       };
     };
@@ -796,6 +808,8 @@ async function forwardStatus(
       updateBatchProgress();
     }
     }));
+    completedBatchDurationMs += Date.now() - batchStartedAt;
+    completedBatchCount++;
   }
   if (entry) {
     let finalState = "failed";
@@ -2201,16 +2215,28 @@ app.post(
     }
     let wasStopped = false;
     const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
+    let completedBatchDurationMs = 0;
+    let completedBatchCount = 0;
     for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 30) {
       if (entry.stopForwardingRequested) { wasStopped = true; break; }
       const batchGroups = selectedGroups.slice(batchStart, batchStart + 30);
+      const batchStartedAt = Date.now();
       const updateBatchProgress = () => {
         const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
         const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 30);
+        const averageBatchSeconds = completedBatchCount > 0
+          ? Math.max(5, completedBatchDurationMs / completedBatchCount / 1000)
+          : 30;
+        const processedInBatch = Math.min(batchGroups.length, Math.max(0,
+          successCount + failureCount + skippedLocked - initiallySkipped - batchStart));
+        const currentBatchRemaining = processedInBatch > 0
+          ? averageBatchSeconds * (batchGroups.length - processedInBatch) / batchGroups.length
+          : averageBatchSeconds;
+        const remainingSeconds = Math.max(0, currentBatchRemaining + Math.max(0, remainingBatches - 1) * averageBatchSeconds);
         entry.forwardingStatus = {
           state: "forwarding", current: successCount, total: selectedGroups.length,
           attempting: batchStart + batchGroups.length, skipped: skippedLocked,
-          startedAt, etaSeconds: elapsedSeconds + remainingBatches * 30,
+          startedAt, etaSeconds: elapsedSeconds + Math.ceil(remainingSeconds),
           message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}; skipped ${skippedLocked} locked`
         };
       };
@@ -2231,6 +2257,8 @@ app.post(
         }
         updateBatchProgress();
       }));
+      completedBatchDurationMs += Date.now() - batchStartedAt;
+      completedBatchCount++;
     }
     const state = wasStopped ? "stopped" : successCount === selectedGroups.length ? "forwarded" : successCount > 0 ? "partial" : "failed";
     entry.forwardingStatus = {
