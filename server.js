@@ -2052,12 +2052,11 @@ app.post(
       if (connection) connection.forwardingStatus = { state: "idle", current: 0, total: 0, message: "Waiting" };
       saveAccounts(accounts);
 
-      // Save Groups never joins groups. It saves forwarding selections and only publishes
-      // invite links that WhatsApp confirms are valid. Existing invites are reported as duplicates.
-      let verified = 0, added = 0, duplicates = 0, unverified = 0;
+      // Save Groups never joins groups. It collects the invite code WhatsApp makes available
+      // for each selected group; it does not run a separate invite-verification request.
+      let collectable = 0, added = 0, duplicates = 0, unverified = 0;
       const results = [];
-      if (connection?.sock && typeof connection.sock.groupInviteCode === "function" &&
-          typeof connection.sock.groupGetInviteInfo === "function") {
+      if (connection?.sock && typeof connection.sock.groupInviteCode === "function") {
         let metadata = {};
         try { metadata = await withTimeout(() => connection.sock.groupFetchAllParticipating(), 15000, "Fetching group details timed out."); }
         catch (e) { console.warn("Could not fetch participating groups:", e?.message || e); }
@@ -2068,51 +2067,38 @@ app.post(
             const code = await withTimeout(
               () => connection.sock.groupInviteCode(groupId),
               12000,
-              "WhatsApp did not return an invite code in time."
+              "WhatsApp did not provide a group invite link in time."
             );
             if (!code) {
               unverified++;
-              results.push({ groupId, status: "unverified", message: "WhatsApp did not provide an invite code; not added to the library." });
+              results.push({ groupId, status: "not_collectable", message: "WhatsApp did not provide an invite link for this group." });
               return;
             }
+            collectable++;
             if (seenInviteCodes.has(code)) {
               duplicates++;
-              results.push({ groupId, code, status: "duplicate", message: "This invite was already processed in this save; duplicate ignored." });
+              results.push({ groupId, code, status: "duplicate", message: "This invite link was already collected during this save; duplicate ignored." });
               return;
             }
             seenInviteCodes.add(code);
-            let inviteInfo;
-            try {
-              inviteInfo = await withTimeout(
-                () => connection.sock.groupGetInviteInfo(code),
-                12000,
-                "WhatsApp invite verification timed out."
-              );
-            } catch { inviteInfo = null; }
-            if (!inviteInfo?.id) {
-              unverified++;
-              results.push({ groupId, code, status: "unverified", message: "WhatsApp could not verify this invite; not added to the library." });
-              return;
-            }
-            verified++;
             const existing = await mongoDb.collection("join_groups").findOne({ _id: code });
             const group = metadata?.[groupId];
             await saveSharedJoinGroup({
               code,
               link: "https://chat.whatsapp.com/" + code,
-              name: group?.subject || group?.name || inviteInfo.subject || inviteInfo.name || "WhatsApp Group",
+              name: group?.subject || group?.name || "WhatsApp Group",
               source: "saved-group"
             });
             if (existing) {
               duplicates++;
-              results.push({ groupId, code, status: "duplicate", message: "Invite already exists in the shared library; duplicate ignored." });
+              results.push({ groupId, code, status: "duplicate", message: "This invite link is already in the shared library; duplicate ignored." });
             } else {
               added++;
-              results.push({ groupId, code, status: "added", message: "Invite verified by WhatsApp and added to the shared library." });
+              results.push({ groupId, code, status: "added", message: "Available invite link collected and added without a separate verification step." });
             }
           } catch (e) {
             unverified++;
-            results.push({ groupId, status: "unverified", message: "Could not verify/publish invite: " + String(e?.message || e).slice(0, 160) });
+            results.push({ groupId, status: "not_collectable", message: "Not collectable: WhatsApp did not make an invite link available for this group. " + String(e?.message || e).slice(0, 120) });
           }
         };
         const worker = async () => {
@@ -2125,9 +2111,10 @@ app.post(
         await Promise.all(Array.from({ length: Math.min(3, groupIds.length) }, () => worker()));
       } else if (groupIds.length) { unverified = groupIds.length; }
       const message = !connection?.sock
-        ? "Forwarding selection saved. Connect this WhatsApp account to verify and publish its invite links."
-        : `Saved ${groupIds.length} forwarding group${groupIds.length === 1 ? "" : "s"}. Shared invites: ${added} added, ${duplicates} duplicates ignored, ${unverified} unverified/not added. No groups were joined.`;
-      res.json({ success: true, account: accountPublic(account), verified, added, duplicates, unverified, results, message });
+        ? "Forwarding selection saved. Connect this WhatsApp account to collect available invite links."
+        : `Saved ${groupIds.length} forwarding group${groupIds.length === 1 ? "" : "s"}. Invite links: ${collectable} collectable, ${added} added, ${duplicates} duplicates ignored, ${unverified} not collectable. No groups were joined.`;
+      // Keep the legacy verified field as an alias so older clients do not break; no verification call is made.
+      res.json({ success: true, account: accountPublic(account), collectable, verified: collectable, added, duplicates, unverified, notCollectable: unverified, results, message });
     } catch (error) {
       res.status(500).json({ success: false, error: error?.message || "Failed to save groups" });
     }

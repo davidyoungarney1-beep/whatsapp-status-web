@@ -26,12 +26,12 @@ window.sjRenderSaveStats=function(accountId,data,selected){
   card.innerHTML=`<h3 style="margin:0 0 12px">Save Groups — Statistics</h3>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin-bottom:12px">
       <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${(selected||[]).length}</b><span>Groups selected</span></div>
-      <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${Number(data.verified||0)}</b><span>Links verified</span></div>
+      <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${Number(data.collectable??data.verified??0)}</b><span>Links collectable</span></div>
       <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${Number(data.added||0)}</b><span>Links added</span></div>
       <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${Number(data.duplicates||0)}</b><span>Duplicates ignored</span></div>
-      <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${Number(data.unverified||0)}</b><span>Unverified links not added</span></div>
+      <div style="padding:10px;background:#fff;border:1px solid #dcebe3;border-radius:8px"><b style="display:block;font-size:22px">${Number(data.unverified||0)}</b><span>Not collectable</span></div>
     </div>
-    <div style="font-size:13px;line-height:1.5">Forwarding selections were saved. Verified invite links were published to the shared library. No groups were joined.</div>`;
+    <div style="font-size:13px;line-height:1.5">Forwarding selections were saved. Available invite links were collected without a separate verification step. No groups were joined.</div>`;
   host.appendChild(card);
 };
 
@@ -47,11 +47,11 @@ window.saveGroups=async function(id){
   var previous=document.getElementById(loaderId);if(previous)previous.remove();
   var loader=document.createElement("div");loader.id=loaderId;
   loader.style.cssText="display:flex;align-items:center;gap:10px;margin:12px 0;padding:12px;border:1px solid #cfe2d8;border-radius:9px;background:#f5fbf7;color:#173d31";
-  loader.innerHTML='<span style="width:20px;height:20px;border:3px solid #cfe2d8;border-top-color:#128c7e;border-radius:50%;display:inline-block;animation:sjSaveSpin .75s linear infinite;flex-shrink:0"></span><span><b>Saving groups…</b><br><small>Verifying invite links and updating the shared library. Please keep this page open.</small></span>';
+  loader.innerHTML='<span style="width:20px;height:20px;border:3px solid #cfe2d8;border-top-color:#128c7e;border-radius:50%;display:inline-block;animation:sjSaveSpin .75s linear infinite;flex-shrink:0"></span><span><b>Saving groups…</b><br><small>Collecting available invite links and updating the shared library. Please keep this page open.</small></span>';
   if(!document.getElementById("sj-save-spin-style")){var style=document.createElement("style");style.id="sj-save-spin-style";style.textContent="@keyframes sjSaveSpin{to{transform:rotate(360deg)}}";document.head.appendChild(style)}
   if(host)host.prepend(loader);
   if(button){button.disabled=true;button.textContent="Saving…";button.style.opacity=".7"}
-  if(progress)progress.textContent="Saving forwarding selections and verifying invite links…";
+  if(progress)progress.textContent="Saving forwarding selections and collecting available invite links…";
   try{
     var response=await fetch(api+"/api/accounts/"+encodeURIComponent(id)+"/groups",{
       method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({groups:selected})
@@ -61,7 +61,7 @@ window.saveGroups=async function(id){
     if(typeof window.groups==="function")await window.groups(id);
     window.sjRenderSaveStats(id,data,selected);
     if(typeof window.sjLoad==="function")await window.sjLoad();
-    if(progress)progress.textContent=data.message||("Saved "+selected.length+" forwarding selections. "+Number(data.added||0)+" links added, "+Number(data.duplicates||0)+" duplicates ignored, "+Number(data.unverified||0)+" unverified links not added. No groups were joined.");
+    if(progress)progress.textContent=data.message||("Saved "+selected.length+" forwarding selections. "+Number(data.added||0)+" links added, "+Number(data.duplicates||0)+" duplicates ignored, "+Number(data.unverified||0)+" links not collectable. No groups were joined.");
   }catch(error){
     var currentLoader=document.getElementById(loaderId);if(currentLoader)currentLoader.remove();
     if(progress)progress.textContent=error.message||"Could not save groups";
