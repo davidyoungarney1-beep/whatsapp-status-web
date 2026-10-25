@@ -1085,12 +1085,16 @@ if(status.startedAt && Number(status.etaSeconds)>0){
   const left=Math.max(0,Number(status.etaSeconds)-elapsed);
   if(left>=60){ etaText=` • est. ${Math.ceil(left/60)} min left`; }
   else if(left>5){ etaText=` • est. ${left} sec left`; }
-  else { etaText=" • finishing soon"; }
+  else { etaText=status.phase==="preparing"?" • starting soon":" • finishing soon"; }
 }
 const processing=status.attempting?` (processing ${status.attempting}/${total})`:"";
 const skipped=Number(status.skipped||0);
 const skippedText=skipped?` • skipped ${skipped} locked`:"";
-displayText=total?`Forwarded ${current}/${total}${processing}${etaText}${skippedText}`:`Forwarding...${skippedText}`;
+if(status.phase==="preparing"){
+  displayText=`Preparing link preview before forwarding${etaText}${skippedText}`;
+}else{
+  displayText=total?`Forwarded ${current}/${total}${processing}${etaText}${skippedText}`:`Forwarding...${skippedText}`;
+}
 
 }
 

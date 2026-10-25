@@ -645,8 +645,9 @@ async function forwardStatus(
       attempting: 0,
       skipped: skippedLocked,
       startedAt: Date.now(),
-      etaSeconds: Math.ceil(selectedGroups.length / 30) * 30,
-      message: `Forwarded 0/${selectedGroups.length}`
+      etaSeconds: Math.ceil(selectedGroups.length / 30) * 15 + 3,
+      phase: "preparing",
+      message: "Preparing link preview before forwarding"
     };
   }
 
@@ -669,6 +670,14 @@ async function forwardStatus(
     mediaBuffer = await downloadMediaMessage(message, "buffer", {}, {
       logger, reuploadRequest: sock.updateMediaMessage
     });
+  }
+
+  if (entry?.forwardingStatus) {
+    entry.forwardingStatus = {
+      ...entry.forwardingStatus,
+      phase: "sending",
+      message: "Preview check complete; starting forwarding"
+    };
   }
 
   let successCount = 0;
@@ -699,6 +708,7 @@ async function forwardStatus(
       entry.forwardingStatus = {
         ...entry.forwardingStatus,
         state: "forwarding",
+        phase: "sending",
         current: successCount,
         total: selectedGroups.length,
         attempting: batchStart + batchGroups.length,
@@ -2164,8 +2174,9 @@ app.post(
       entry.stopForwardingRequested = false;
       entry.forwardingStatus = {
         state: "forwarding", current: 0, total: selectedGroups.length,
-        attempting: 0, skipped: initiallySkipped, startedAt: Date.now(), etaSeconds: Math.ceil(selectedGroups.length / 30) * 30,
-        message: `Posting status, then forwarding to 0/${selectedGroups.length} unlocked groups`
+        attempting: 0, skipped: initiallySkipped, startedAt: Date.now(), etaSeconds: Math.ceil(selectedGroups.length / 30) * 15 + 3,
+        phase: "preparing",
+        message: "Preparing link preview before forwarding"
       };
     }
 
@@ -2213,6 +2224,11 @@ app.post(
     } catch (error) {
       console.warn("Direct Status link preview preparation failed; continuing without cached preview:", error?.message || error);
     }
+    entry.forwardingStatus = {
+      ...entry.forwardingStatus,
+      phase: "sending",
+      message: "Preview check complete; starting forwarding"
+    };
     let wasStopped = false;
     const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
     let completedBatchDurationMs = 0;
@@ -2234,7 +2250,7 @@ app.post(
           : averageBatchSeconds;
         const remainingSeconds = Math.max(0, currentBatchRemaining + Math.max(0, remainingBatches - 1) * averageBatchSeconds);
         entry.forwardingStatus = {
-          state: "forwarding", current: successCount, total: selectedGroups.length,
+          state: "forwarding", phase: "sending", current: successCount, total: selectedGroups.length,
           attempting: batchStart + batchGroups.length, skipped: skippedLocked,
           startedAt, etaSeconds: elapsedSeconds + Math.ceil(remainingSeconds),
           message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}; skipped ${skippedLocked} locked`
