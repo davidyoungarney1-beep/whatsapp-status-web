@@ -497,7 +497,7 @@ function isLockedGroupError(error) {
 async function sendTextStatusWithPreview(sock, jid, text, preparedUrlInfo) {
   const urlInfo = preparedUrlInfo ?? await getUrlInfo(text, {
     thumbnailWidth: 192,
-    fetchOpts: { timeout: 3000 },
+    fetchOpts: { timeout: 7000 },
     logger,
     uploadImage: sock.waUploadToServer
   });
@@ -505,18 +505,23 @@ async function sendTextStatusWithPreview(sock, jid, text, preparedUrlInfo) {
   const extendedTextMessage = { text };
 
   if (urlInfo) {
+    // WhatsApp needs canonicalUrl as well as matchedText to render the link card.
+    // Casileys getUrlInfo returns these using hyphenated keys.
     extendedTextMessage.matchedText =
-      urlInfo["matched-text"];
+      urlInfo["matched-text"] || text;
+    extendedTextMessage.canonicalUrl =
+      urlInfo["canonical-url"] || urlInfo.url || urlInfo["matched-text"] || text;
     extendedTextMessage.jpegThumbnail =
       urlInfo.jpegThumbnail;
     extendedTextMessage.description =
-      urlInfo.description;
+      urlInfo.description || "";
     extendedTextMessage.title =
-      urlInfo.title;
+      urlInfo.title || extendedTextMessage.canonicalUrl;
     extendedTextMessage.previewType =
       urlInfo.previewType ?? 0;
-    extendedTextMessage.linkPreviewMetadata =
-      urlInfo.linkPreviewMetadata;
+    if (urlInfo.linkPreviewMetadata) {
+      extendedTextMessage.linkPreviewMetadata = urlInfo.linkPreviewMetadata;
+    }
 
     const img = urlInfo.highQualityThumbnail;
 
@@ -660,7 +665,7 @@ async function forwardStatus(
   if (type === "text") {
     try {
       preparedUrlInfo = await getUrlInfo(text || "", {
-        thumbnailWidth: 192, fetchOpts: { timeout: 3000 }, logger,
+        thumbnailWidth: 192, fetchOpts: { timeout: 7000 }, logger,
         uploadImage: sock.waUploadToServer
       });
     } catch (error) {
@@ -2218,7 +2223,7 @@ app.post(
     let preparedUrlInfo = null;
     try {
       preparedUrlInfo = await getUrlInfo(statusText, {
-        thumbnailWidth: 192, fetchOpts: { timeout: 3000 }, logger,
+        thumbnailWidth: 192, fetchOpts: { timeout: 7000 }, logger,
         uploadImage: connection.sock.waUploadToServer
       });
     } catch (error) {
