@@ -1384,7 +1384,10 @@ onclick="groups('${id}')"
 Refresh Groups
 </button>
 
+<button class="danger" id="clear-selected-groups-btn-${id}" onclick="confirmClearSelectedGroupMessages('${id}')">Clear My Group Messages</button>
+
 </div>
+<div id="clear-selected-groups-progress-${id}" class="post-result" style="display:none;margin-top:10px" role="status" aria-live="polite"></div>
 
 </div>
 
@@ -1547,6 +1550,43 @@ e.message
 }
 
 
+
+async function confirmClearSelectedGroupMessages(id){
+  const confirmed=confirm("Clear the local message history in the groups already selected and saved for this WhatsApp account?\n\nThis affects only your account's view. It does NOT delete messages for other group members. This action may be irreversible.\n\nContinue?");
+  if(!confirmed)return;
+  const button=document.getElementById("clear-selected-groups-btn-"+id);
+  const box=document.getElementById("clear-selected-groups-progress-"+id);
+  if(button){button.disabled=true;button.textContent="Starting...";}
+  if(box){box.style.display="block";box.className="post-result success";box.textContent="Starting clear task...";}
+  try{
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/clear-selected-group-messages",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const data=await r.json();
+    if(!r.ok||!data.success)throw new Error(data.error||"Could not start clearing messages.");
+    await pollClearSelectedGroupMessages(id);
+  }catch(error){
+    if(box){box.style.display="block";box.className="post-result error";box.textContent=error.message||"Could not clear selected group messages.";}
+  }finally{
+    if(button){button.disabled=false;button.textContent="Clear My Group Messages";}
+  }
+}
+async function pollClearSelectedGroupMessages(id){
+  const box=document.getElementById("clear-selected-groups-progress-"+id);
+  let terminal=false;
+  while(!terminal){
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/clear-selected-group-messages/progress",{cache:"no-store"});
+    const data=await r.json();
+    if(!r.ok||!data.success)throw new Error(data.error||"Could not check clear progress.");
+    const p=data.progress||{};
+    if(box){
+      box.style.display="block";
+      box.className="post-result "+(p.state==="failed"?"error":(["completed","partial"].includes(p.state)?(p.failed?"error":"success"):"success"));
+      box.textContent=(p.message||"Working...")+(p.total?` Progress: ${p.current||0}/${p.total}; cleared ${p.cleared||0}; failed ${p.failed||0}.`:"");
+      if(p.errors?.length)box.textContent+=" Details: "+p.errors.map(e=>(e.group||"Group")+": "+e.message).join(" | ");
+    }
+    terminal=["completed","partial","failed"].includes(p.state);
+    if(!terminal)await new Promise(resolve=>setTimeout(resolve,900));
+  }
+}
 
 async function confirmLeaveAllGroups(id){
   const confirmed=confirm("Leave ALL WhatsApp groups for this connected account?\n\nThis affects only this account. You may need new invitations to rejoin groups. Any groups successfully left will be removed from this account's forwarding selection.\n\nContinue?");

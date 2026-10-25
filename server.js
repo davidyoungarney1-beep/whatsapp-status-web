@@ -80,6 +80,7 @@ function withTimeout(operation, timeoutMs, message) {
 }
 
 const connections = new Map();
+const clearSelectedGroupJobs = new Map();
 const pairingWaiters = new Map();
 const reconnecting = new Set();
 // Prevent concurrent requests/reconnect timers from opening multiple sockets for one saved account.
@@ -2031,6 +2032,51 @@ app.get(
   }
 );
 
+
+/* CLEAR MESSAGES IN THIS ACCOUNT'S ALREADY-SELECTED GROUPS (FOR THIS ACCOUNT ONLY) */
+function startClearSelectedGroupMessages(accountId) {
+  const account = readAccounts().find(item => item.id === accountId);
+  const conn = connections.get(accountId);
+  const fail = message => ({ state: "failed", current: 0, total: 0, cleared: 0, failed: 0, message, errors: [] });
+  const existing = clearSelectedGroupJobs.get(accountId);
+  if (existing?.state === "running") return existing;
+  if (!account) return fail("Account not found.");
+  if (!conn?.connected || !conn?.sock) return fail("Connect this WhatsApp account first.");
+  if (conn.forwardingStatus?.state === "forwarding") return fail("Stop status forwarding before clearing messages.");
+  if (typeof conn.sock.chatModify !== "function") return fail("This WhatsApp library does not support clearing chat history.");
+  const selected = [...new Set((account.selectedGroups || []).filter(id => typeof id === "string" && id.endsWith("@g.us")))];
+  if (!selected.length) return fail("No groups are currently selected. Select and save groups first.");
+  const job = { state: "running", current: 0, total: selected.length, cleared: 0, failed: 0, message: "Preparing to clear selected group histories for this account only...", errors: [] };
+  clearSelectedGroupJobs.set(accountId, job);
+  (async () => {
+    for (const groupId of selected) {
+      job.current++;
+      job.message = `Clearing selected group ${job.current}/${job.total} for this account only...`;
+      try {
+        // Local chat-history clear; does not send delete-for-everyone messages.
+        await withTimeout(() => conn.sock.chatModify({ clear: true, lastMessages: [] }, groupId), 15000, "WhatsApp timed out while clearing this group's local history.");
+        job.cleared++;
+      } catch (error) {
+        job.failed++;
+        if (job.errors.length < 8) job.errors.push({ group: groupId, message: String(error?.message || error).slice(0, 160) });
+      }
+      if (job.current < job.total) await new Promise(resolve => setTimeout(resolve, 350));
+    }
+    if (job.failed && job.cleared) { job.state = "partial"; job.message = `Finished: cleared ${job.cleared} selected groups for this account; ${job.failed} failed.`; }
+    else if (job.failed) { job.state = "failed"; job.message = `Could not clear any selected group histories; ${job.failed} failed. Check the errors below.`; }
+    else { job.state = "completed"; job.message = `Cleared local message history in all ${job.cleared} selected groups for this account only. Other members' messages are unchanged.`; }
+  })().catch(error => { job.state = "failed"; job.message = String(error?.message || error).slice(0, 200); });
+  return job;
+}
+app.post("/api/accounts/:accountId/clear-selected-group-messages", (req, res) => {
+  const job = startClearSelectedGroupMessages(req.params.accountId);
+  if (job.state === "failed") return res.status(400).json({ success: false, error: job.message, progress: job });
+  return res.json({ success: true, message: "Clear selected group messages started", progress: job });
+});
+app.get("/api/accounts/:accountId/clear-selected-group-messages/progress", (req, res) => {
+  const job = clearSelectedGroupJobs.get(req.params.accountId) || { state: "idle", current: 0, total: 0, cleared: 0, failed: 0, message: "No clear task is running.", errors: [] };
+  return res.json({ success: true, progress: job });
+});
 
 /*
 |--------------------------------------------------------------------------
