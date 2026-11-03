@@ -3,13 +3,46 @@ export default {
     const url = new URL(request.url);
 
     // Serve the website HTML and other static files from Cloudflare.
-    // The Node.js/WhatsApp backend remains on Render and is used as a fallback
-    // for API and other non-static requests.
+    // The Node.js/WhatsApp backend remains on Render and handles APIs.
     if (request.method === "GET" || request.method === "HEAD") {
       try {
         const assetResponse = await env.ASSETS.fetch(request);
         if (assetResponse.status !== 404) {
           const headers = new Headers(assetResponse.headers);
+
+          // Cloudflare serves frontend/index.html directly, bypassing the
+          // Render "/" route that normally injects the shared join panel.
+          // Add that panel here so Cloudflare and Render show the same UI.
+          if (
+            request.method === "GET" &&
+            url.pathname === "/" &&
+            assetResponse.ok &&
+            (headers.get("Content-Type") || "").includes("text/html")
+          ) {
+            const html = await assetResponse.text();
+            if (!html.includes('id="shared-join-groups"')) {
+              const panelUrl = new URL("/join-groups-panel.html", url);
+              const panelResponse = await env.ASSETS.fetch(
+                new Request(panelUrl.toString(), { method: "GET" })
+              );
+
+              if (panelResponse.ok) {
+                const panel = await panelResponse.text();
+                const updatedHtml = html.replace(
+                  /<\/body\s*>/i,
+                  `${panel}\n</body>`
+                );
+                headers.set("Cache-Control", "public, max-age=60, must-revalidate");
+                headers.delete("Content-Length");
+                return new Response(updatedHtml, {
+                  status: assetResponse.status,
+                  statusText: assetResponse.statusText,
+                  headers
+                });
+              }
+            }
+          }
+
           headers.set("Cache-Control", url.pathname.endsWith(".html")
             ? "public, max-age=60, must-revalidate"
             : "public, max-age=86400");
