@@ -678,6 +678,18 @@ async function forwardStatus(
     });
   }
 
+  if (entry?.stopForwardingRequested) {
+    entry.forwardingStatus = {
+      ...entry.forwardingStatus,
+      state: "stopped",
+      stopRequested: false,
+      current: Number(entry.forwardingStatus?.current || 0),
+      etaSeconds: 0,
+      message: "Forwarding stopped before sending to any more groups"
+    };
+    return;
+  }
+
   if (entry?.forwardingStatus) {
     entry.forwardingStatus = {
       ...entry.forwardingStatus,
@@ -692,16 +704,16 @@ async function forwardStatus(
   let wasStopped = false;
   let completedBatchDurationMs = 0;
   let completedBatchCount = 0;
-  // Send up to 30 groups concurrently; the final batch may contain 1–29 groups.
-  for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 30) {
+  // Send one group at a time so Stop Forwarding is honored before the next destination.
+  for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 1) {
     if (entry?.stopForwardingRequested) { wasStopped = true; break; }
-    const batchGroups = selectedGroups.slice(batchStart, batchStart + 30);
+    const batchGroups = selectedGroups.slice(batchStart, batchStart + 1);
     const batchStartedAt = Date.now();
     const updateBatchProgress = () => {
       if (!entry) return;
       const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
       const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
-      const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 30);
+      const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 1);
       const averageBatchSeconds = completedBatchCount > 0
         ? Math.max(5, completedBatchDurationMs / completedBatchCount / 1000)
         : 30;
@@ -722,7 +734,7 @@ async function forwardStatus(
         startedAt,
         // The UI subtracts elapsed time; estimate remaining time from observed batch speed.
         etaSeconds: elapsedSeconds + Math.ceil(remainingSeconds),
-        message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}`
+        message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 1) + 1}/${Math.ceil(selectedGroups.length / 1)}`
       };
     };
     updateBatchProgress();
@@ -2344,7 +2356,7 @@ app.post("/api/accounts/:accountId/stop-forwarding", (req, res) => {
     ...entry.forwardingStatus,
     state: "forwarding",
     stopRequested: true,
-    message: "Stopping after the current group finishes..."
+    message: "Stop received — finishing only the current group, then stopping."
   };
   console.log(`Stop requested for forwarding job on ${account.phone}`);
   return res.json({ success: true, stopped: true, message: "Stop requested. The current group send will finish, then no more groups will receive this status." });
