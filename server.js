@@ -839,6 +839,8 @@ async function forwardStatus(
     completedBatchDurationMs += Date.now() - batchStartedAt;
     completedBatchCount++;
   }
+  // Also report stopped when the request arrives during the final group's send.
+  if (entry?.stopForwardingRequested) wasStopped = true;
   if (entry) {
     let finalState = "failed";
     let finalMessage = `Failed 0/${selectedGroups.length} groups`;
