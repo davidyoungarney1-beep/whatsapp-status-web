@@ -443,6 +443,16 @@ cursor:pointer
 background:#b02a37!important
 }
 
+.stop-forwarding-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;min-width:34px;padding:0;margin:6px 0;
+  border:0;border-radius:50%;background:#dc3545;color:#fff;
+  font-size:13px;font-weight:900;line-height:1;cursor:pointer;
+  box-shadow:0 2px 6px #dc354544;
+}
+.stop-forwarding-btn:hover{background:#b02a37}
+.stop-forwarding-btn:disabled{opacity:.7;cursor:wait}
+
 </style>
 
 </head>
@@ -934,7 +944,7 @@ Waiting
 </span>
 
 </div>
-<button type="button" class="danger stop-forwarding-btn" id="stop-forwarding-${esc(x.id)}" onclick="stopForwarding('${x.id}')" style="display:none;margin:8px 0;width:100%">Stop Forwarding</button>
+<button type="button" class="stop-forwarding-btn" id="stop-forwarding-${esc(x.id)}" onclick="stopForwarding('${x.id}')" title="Stop forwarding" aria-label="Stop forwarding" style="display:none">■</button>
 
 <div class="post-mode-panel">
   <b>Choose How to Post</b>
@@ -1644,15 +1654,15 @@ async function stopLeaveAllGroups(id){
 
 async function stopForwarding(id){
   const button=document.getElementById("stop-forwarding-"+id);
-  if(button){button.disabled=true;button.textContent="Stopping...";}
+  if(button){button.disabled=true;button.textContent="…";button.title="Stopping forwarding";}
   try{
-    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/stop-forwarding",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const r=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/stop-forwarding",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}",cache:"no-store"});
     const data=await r.json();
     if(!r.ok||!data.success) throw new Error(data.error||"Could not stop forwarding");
-    if(button) button.textContent=data.stopped?"Stopping...":"No Active Forwarding";
+    if(button){button.textContent="■";button.title="Stop request sent";}
     await pollForwardingStatus();
   }catch(e){
-    if(button){button.disabled=false;button.textContent="Stop Forwarding";}
+    if(button){button.disabled=false;button.textContent="■";button.title="Stop forwarding";}
     alert(e.message||"Could not stop forwarding");
   }
 }
