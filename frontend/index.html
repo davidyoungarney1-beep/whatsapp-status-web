@@ -1052,7 +1052,8 @@ accountsBox.innerHTML='<div class="empty"><strong>Could not load accounts.</stro
 
 function renderStatusPreview(box, preview){
   if(!box || !preview) return;
-  const thumb=preview.thumbnail ? `<img alt="Link preview image" src="data:image/jpeg;base64,${preview.thumbnail}" style="width:100%;max-height:170px;object-fit:cover;border-radius:9px 9px 0 0">` : "";
+  const thumbSrc=preview.thumbnail ? (String(preview.thumbnail).startsWith("data:") ? preview.thumbnail : `data:image/jpeg;base64,${preview.thumbnail}`) : "";
+  const thumb=thumbSrc ? `<img alt="Status preview image" src="${thumbSrc}" style="width:100%;max-height:170px;object-fit:cover;border-radius:9px 9px 0 0">` : "";
   const title=esc(preview.title || "WhatsApp Status");
   const description=esc(preview.description || "");
   const url=esc(preview.url || "");
