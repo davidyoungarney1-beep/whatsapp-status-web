@@ -1120,8 +1120,8 @@ className="forwarded";
 
 
 displayText=total
-?`Forwarded ${current}/${total}${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`
-:`Forwarded${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`;
+?`Done ✓ Forwarded ${current}/${total}${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`
+:`Done ✓ Forwarded${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`;
 
 }
 
@@ -1132,8 +1132,8 @@ className="partial";
 
 
 displayText=total
-?`Forwarded ${current}/${total}${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`
-:`Partially forwarded${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`;
+?`Finished • Forwarded ${current}/${total} • ${Number(status.failed||0)} failed${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`
+:`Finished • Partially forwarded${Number(status.failed||0)?` • ${Number(status.failed||0)} failed`:""}${Number(status.skipped||0)?` • skipped ${Number(status.skipped||0)} locked`:""}`;
 
 }
 
