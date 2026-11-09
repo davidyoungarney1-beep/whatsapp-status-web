@@ -558,6 +558,29 @@ async function sendTextStatusWithPreview(sock, jid, text, preparedUrlInfo) {
 }
 
 
+function buildStatusPreview(type, text, urlInfo = null, mediaBuffer = null, message = null) {
+  const msg = unwrapMessage(message?.message);
+  let thumbnail = null;
+  const jpeg = urlInfo?.jpegThumbnail;
+  if (Buffer.isBuffer(jpeg) && jpeg.length) {
+    thumbnail = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+  } else if (typeof jpeg === "string" && jpeg.length) {
+    thumbnail = jpeg.startsWith("data:") ? jpeg : `data:image/jpeg;base64,${jpeg}`;
+  } else if (type === "image" && Buffer.isBuffer(mediaBuffer) && mediaBuffer.length <= 1500000) {
+    const mime = msg?.imageMessage?.mimetype || "image/jpeg";
+    thumbnail = `data:${mime};base64,${mediaBuffer.toString("base64")}`;
+  }
+  return {
+    type,
+    text: String(text || ""),
+    title: urlInfo?.title || urlInfo?.canonicalUrl || urlInfo?.["canonical-url"] || "",
+    description: urlInfo?.description || "",
+    url: urlInfo?.["canonical-url"] || urlInfo?.url || urlInfo?.["matched-text"] || "",
+    thumbnail
+  };
+}
+
+
 function rememberDirectStatusEcho(accountId, sentMessage, text) {
   const keyId = sentMessage?.key?.id;
   if (!keyId) return;
@@ -645,15 +668,11 @@ async function forwardStatus(
   if (entry) {
     entry.stopForwardingRequested = false;
     entry.forwardingStatus = {
-      state: "forwarding",
-      current: 0,
-      total: selectedGroups.length,
-      attempting: 0,
-      skipped: skippedLocked,
-      startedAt: Date.now(),
+      state: "forwarding", current: 0, total: selectedGroups.length,
+      attempting: 0, skipped: skippedLocked, startedAt: Date.now(),
       etaSeconds: Math.ceil(selectedGroups.length / 30) * 15 + 3,
-      phase: "preparing",
-      message: "Preparing link preview before forwarding"
+      phase: "preparing", message: "Preparing status preview before forwarding",
+      preview: { type, text: getText(message) || "", title: type === "text" ? "Preparing link preview" : `${type.charAt(0).toUpperCase()}${type.slice(1)} Status`, description: type === "text" ? "Checking link details…" : "Your WhatsApp status is ready to forward." }
     };
   }
 
@@ -682,6 +701,11 @@ async function forwardStatus(
     );
   }
 
+  const statusPreview = buildStatusPreview(type, text, preparedUrlInfo, mediaBuffer, message);
+  if (entry?.forwardingStatus) {
+    entry.forwardingStatus = { ...entry.forwardingStatus, preview: statusPreview };
+  }
+
   if (entry?.stopForwardingRequested) {
     entry.forwardingStatus = {
       ...entry.forwardingStatus,
@@ -695,10 +719,19 @@ async function forwardStatus(
   }
 
   if (entry?.forwardingStatus) {
+    const previewThumb = preparedUrlInfo?.jpegThumbnail;
     entry.forwardingStatus = {
       ...entry.forwardingStatus,
       phase: "sending",
-      message: "Preview check complete; starting forwarding"
+      message: "Preview ready; starting forwarding",
+      preview: {
+        type, text: text || "",
+        title: preparedUrlInfo?.title || preparedUrlInfo?.["canonical-url"] || (type === "text" ? "Text Status" : `${type.charAt(0).toUpperCase()}${type.slice(1)} Status`),
+        description: preparedUrlInfo?.description || (type === "text" ? "Link preview unavailable; text will still be forwarded." : "Detected from your WhatsApp Status."),
+        url: preparedUrlInfo?.["canonical-url"] || preparedUrlInfo?.url || preparedUrlInfo?.["matched-text"] || "",
+        thumbnail: (previewThumb || unwrapMessage(message.message)?.imageMessage?.jpegThumbnail || unwrapMessage(message.message)?.videoMessage?.jpegThumbnail)
+          ? Buffer.from(previewThumb || unwrapMessage(message.message)?.imageMessage?.jpegThumbnail || unwrapMessage(message.message)?.videoMessage?.jpegThumbnail).toString("base64") : ""
+      }
     };
   }
 
@@ -865,6 +898,7 @@ async function forwardStatus(
     }
 
     entry.forwardingStatus = {
+      preview: entry.forwardingStatus?.preview || statusPreview,
       state: finalState,
       current: successCount,
       total: selectedGroups.length,
@@ -2197,6 +2231,28 @@ app.post(
 |--------------------------------------------------------------------------
 */
 
+app.post("/api/accounts/:accountId/link-preview", async (req, res) => {
+  const account = readAccounts().find(item => item.id === req.params.accountId);
+  if (!account) return res.status(404).json({ success: false, error: "Account not found" });
+  const connection = connections.get(account.id);
+  if (!connection?.connected || !connection?.sock) return res.status(400).json({ success: false, error: "Connect this WhatsApp account first." });
+  const text = String(req.body?.text || "").trim();
+  if (!text) return res.status(400).json({ success: false, error: "Enter status text or a link first." });
+  try {
+    const info = await getUrlInfo(text, { thumbnailWidth: 320, fetchOpts: { timeout: 10000 }, logger, uploadImage: connection.sock.waUploadToServer });
+    const thumb = info?.jpegThumbnail;
+    return res.json({ success: true, preview: {
+      text,
+      title: info?.title || info?.["canonical-url"] || info?.url || "Text Status",
+      description: info?.description || "",
+      url: info?.["canonical-url"] || info?.url || info?.["matched-text"] || "",
+      thumbnail: thumb ? Buffer.from(thumb).toString("base64") : ""
+    }});
+  } catch (error) {
+    return res.status(422).json({ success: false, error: error?.message || "Could not generate link preview." });
+  }
+});
+
 app.post(
   "/api/accounts/:accountId/post-link-status",
   async (req, res) => {
@@ -2287,8 +2343,9 @@ app.post(
     }
     entry.forwardingStatus = {
       ...entry.forwardingStatus,
+      preview: buildStatusPreview("text", statusText, preparedUrlInfo),
       phase: "sending",
-      message: "Preview check complete; starting forwarding"
+      message: "Preview generated; starting forwarding"
     };
     let wasStopped = false;
     const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
@@ -2339,6 +2396,7 @@ app.post(
     }
     const state = wasStopped ? "stopped" : successCount === selectedGroups.length ? "forwarded" : successCount > 0 ? "partial" : "failed";
     entry.forwardingStatus = {
+      preview: entry.forwardingStatus?.preview || buildStatusPreview("text", statusText, preparedUrlInfo),
       state, current: successCount, total: selectedGroups.length,
       attempting: selectedGroups.length, skipped: skippedLocked, startedAt: entry.forwardingStatus.startedAt,
       etaSeconds: 0,
