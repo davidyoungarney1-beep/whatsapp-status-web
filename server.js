@@ -673,9 +673,13 @@ async function forwardStatus(
       console.warn("Link preview preparation failed; forwarding text without cached preview:", error?.message || error);
     }
   } else if (["image", "video", "audio", "sticker"].includes(type)) {
-    mediaBuffer = await downloadMediaMessage(message, "buffer", {}, {
-      logger, reuploadRequest: sock.updateMediaMessage
-    });
+    mediaBuffer = await withTimeout(
+      () => downloadMediaMessage(message, "buffer", {}, {
+        logger, reuploadRequest: sock.updateMediaMessage
+      }),
+      90000,
+      "Timed out while downloading the status media."
+    );
   }
 
   if (entry?.stopForwardingRequested) {
@@ -746,6 +750,9 @@ async function forwardStatus(
     updateBatchProgress();
 
     try {
+      // A stalled WhatsApp send must not freeze the entire forwarding queue.
+      // Give each destination a firm deadline, then record the failure and continue.
+      await withTimeout(async () => {
       if (type === "text") {
         await sendTextStatusWithPreview(
           sock, groupId, text || "", preparedUrlInfo
@@ -817,6 +824,7 @@ async function forwardStatus(
           buffer
         );
       }
+      }, 60000, `WhatsApp send timed out for ${groupId}`);
 
       successCount++;
       updateBatchProgress();
@@ -862,9 +870,10 @@ async function forwardStatus(
       total: selectedGroups.length,
       attempting: selectedGroups.length,
       skipped: skippedLocked,
+      failed: failureCount,
       startedAt: entry.forwardingStatus.startedAt,
       etaSeconds: 0,
-      message: `${finalMessage}; skipped ${skippedLocked} locked; ${failureCount} failed`
+      message: `${wasStopped ? "Stopped" : "Done"} — ${finalMessage}; skipped ${skippedLocked} locked; ${failureCount} failed`
     };
   }
 }
