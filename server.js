@@ -422,15 +422,20 @@ function getMessageType(message) {
 function isOwnStatus(message, sock, accountPhone = '') {
   const remoteJid = normalizeJid(message?.key?.remoteJid);
   const remoteJidAlt = normalizeJid(message?.key?.remoteJidAlt);
-  const isStatus = remoteJid === 'status@broadcast' || remoteJid?.endsWith('@broadcast') || remoteJidAlt === 'status@broadcast' || remoteJidAlt?.endsWith('@broadcast');
+  const isStatus = remoteJid === "status@broadcast" || remoteJid?.endsWith("@broadcast") || remoteJidAlt === "status@broadcast" || remoteJidAlt?.endsWith("@broadcast");
   if (!isStatus) return false;
+  // Baileys marks a status authored by this linked account with fromMe even when
+  // the participant is represented by a LID that differs from sock.user.id.
   if (message?.key?.fromMe === true) return true;
-  const ownJids = getOwnJids(sock);
-  const possibleSenders = [message?.key?.participant, message?.participant, message?.key?.senderPn, message?.key?.senderLid, message?.key?.remoteJidAlt].filter(Boolean).map(normalizeJid);
-  if (possibleSenders.some(sender => ownJids.some(own => sameJid(sender, own)))) return true;
-  const ownPhone = Array.from(String(accountPhone || '')).filter(ch => ch >= '0' && ch <= '9').join('');
-  if (!ownPhone) return false;
-  return possibleSenders.some(sender => sender.endsWith('@s.whatsapp.net') && Array.from(sender.split('@')[0]).filter(ch => ch >= '0' && ch <= '9').join('') === ownPhone);
+  const ownJids = new Set(getOwnJids(sock));
+  const possibleSenders = [message?.key?.participant, message?.participant, message?.key?.senderPn, message?.key?.senderLid, message?.key?.remoteJidAlt, message?.key?.participantAlt].filter(Boolean).map(normalizeJid);
+  for (const sender of possibleSenders) {
+    if (ownJids.has(sender)) return true;
+    const senderDigits = String(sender.split("@")[0] || "").replace(/\D/g, "");
+    const ownPhone = String(accountPhone || "").replace(/\D/g, "");
+    if (sender.endsWith("@s.whatsapp.net") && ownPhone && (senderDigits === ownPhone || senderDigits.endsWith(ownPhone) || ownPhone.endsWith(senderDigits))) return true;
+  }
+  return false;
 }
 
 function accountPublic(account) {
@@ -1212,6 +1217,7 @@ async function connectWhatsAppInternal(
         console.log(
           `â WhatsApp Connected: ${account.phone}`
         );
+        setTimeout(() => runDirectStatusJob(account.id).catch(error => console.warn("Could not resume saved direct status queue:", error?.message || error)), 1500);
       }
 
       if (connection === "close") {
@@ -1289,9 +1295,7 @@ async function connectWhatsAppInternal(
     async ({ messages }) => {
       for (const message of messages) {
         try {
-          if (!message?.message) {
-            continue;
-          }
+          if (!message) continue;
 
           const remoteJid =
             normalizeJid(
@@ -1310,6 +1314,11 @@ async function connectWhatsAppInternal(
             remoteJidAlt?.endsWith("@broadcast");
 
           if (!isStatusEvent) {
+            continue;
+          }
+          const unwrappedStatus = unwrapMessage(message.message);
+          if (!message.message || !unwrappedStatus || !Object.keys(unwrappedStatus).length) {
+            console.log(`Status update arrived without a downloadable message body for ${account.phone}; waiting for its full upsert payload.`);
             continue;
           }
 
@@ -2253,6 +2262,56 @@ app.post("/api/accounts/:accountId/link-preview", async (req, res) => {
   }
 });
 
+const directStatusJobRunners = new Set();
+
+async function runDirectStatusJob(accountId) {
+  if (directStatusJobRunners.has(accountId) || !mongoDb) return;
+  directStatusJobRunners.add(accountId);
+  try {
+    const jobs = mongoDb.collection("direct_status_jobs");
+    let job = await jobs.findOne({ _id: accountId, state: { $in: ["queued", "running"] } });
+    if (!job) return;
+    const connection = connections.get(accountId);
+    if (!connection?.connected || !connection?.sock) return;
+    const account = readAccounts().find(item => item.id === accountId);
+    if (!account) { await jobs.updateOne({ _id: accountId }, { $set: { state: "failed", updatedAt: new Date(), error: "WhatsApp account no longer exists" } }); return; }
+    const startedAt = Number(job.startedAt || Date.now());
+    let successCount = Number(job.successCount || 0);
+    let failureCount = Number(job.failureCount || 0);
+    let skippedLocked = Number(job.skippedLocked || 0);
+    let index = Number(job.nextIndex || 0);
+    await jobs.updateOne({ _id: accountId }, { $set: { state: "running", updatedAt: new Date() } });
+    connection.stopForwardingRequested = false;
+    connection.forwardingStatus = { ...(connection.forwardingStatus || {}), state: "forwarding", phase: "sending", current: successCount, total: job.groups.length, attempting: index + 1, skipped: skippedLocked, startedAt, etaSeconds: Math.max(0, (job.groups.length - index) * 3), preview: job.preview || connection.forwardingStatus?.preview, message: `Resuming saved queue: ${index}/${job.groups.length} groups processed` };
+    for (; index < job.groups.length; index++) {
+      if (connection.stopForwardingRequested) break;
+      const groupId = job.groups[index];
+      connection.forwardingStatus = { ...connection.forwardingStatus, current: successCount, attempting: index + 1, message: `Forwarded ${successCount}/${job.groups.length}; processing group ${index + 1}/${job.groups.length}` };
+      try {
+        await withTimeout(() => sendTextStatusWithPreview(connection.sock, groupId, job.text, job.preparedUrlInfo || null), 60000, `Timed out sending to group ${index + 1}`);
+        successCount++;
+      } catch (error) {
+        if (isLockedGroupError(error)) skippedLocked++;
+        else failureCount++;
+        console.warn(`Direct status queue send failed at ${index + 1}/${job.groups.length}:`, error?.message || error);
+      }
+      // Persist after EVERY destination. If Render restarts, the next connection resumes here.
+      await jobs.updateOne({ _id: accountId }, { $set: { nextIndex: index + 1, successCount, failureCount, skippedLocked, updatedAt: new Date(), state: "running" } });
+      connection.forwardingStatus = { ...connection.forwardingStatus, current: successCount, attempting: index + 1, skipped: skippedLocked, etaSeconds: Math.max(0, (job.groups.length - index - 1) * 3), message: `Forwarded ${successCount}/${job.groups.length}; ${failureCount} failed; ${skippedLocked} locked` };
+    }
+    const stopped = Boolean(connection.stopForwardingRequested);
+    const complete = index >= job.groups.length;
+    const state = stopped ? "stopped" : complete ? (failureCount === 0 ? "forwarded" : successCount ? "partial" : "failed") : "queued";
+    await jobs.updateOne({ _id: accountId }, { $set: { state, nextIndex: index, successCount, failureCount, skippedLocked, updatedAt: new Date(), finishedAt: complete || stopped ? new Date() : null } });
+    connection.forwardingStatus = { ...connection.forwardingStatus, state: state === "queued" ? "forwarding" : state, current: successCount, total: job.groups.length, attempting: index, skipped: skippedLocked, etaSeconds: 0, message: stopped ? `Stopped after ${successCount}/${job.groups.length} groups` : complete ? `Finished: ${successCount}/${job.groups.length} groups; ${failureCount} failed; ${skippedLocked} locked` : `Queue paused at ${index}/${job.groups.length}; it will resume when WhatsApp reconnects` };
+  } catch (error) {
+    console.error("Durable direct status queue error:", error?.message || error);
+    try { await mongoDb.collection("direct_status_jobs").updateOne({ _id: accountId }, { $set: { state: "queued", updatedAt: new Date(), lastError: String(error?.message || error) } }); } catch {}
+  } finally {
+    directStatusJobRunners.delete(accountId);
+  }
+}
+
 app.post(
   "/api/accounts/:accountId/post-link-status",
   async (req, res) => {
@@ -2329,85 +2388,37 @@ app.post(
       return res.json({ success: true, message: `Your text Status was posted. ${reason}` });
     }
 
-    let successCount = 0;
-    let failureCount = 0;
-    let skippedLocked = initiallySkipped;
-    let preparedUrlInfo = null;
-    try {
-      preparedUrlInfo = await getUrlInfo(statusText, {
-        thumbnailWidth: 192, fetchOpts: { timeout: 7000 }, logger,
-        uploadImage: connection.sock.waUploadToServer
-      });
-    } catch (error) {
-      console.warn("Direct Status link preview preparation failed; continuing without cached preview:", error?.message || error);
-    }
+    const preview = buildStatusPreview("text", statusText, preparedUrlInfo);
+    const job = {
+      _id: account.id,
+      state: "queued",
+      text: statusText,
+      groups: selectedGroups,
+      nextIndex: 0,
+      successCount: 0,
+      failureCount: 0,
+      skippedLocked: initiallySkipped,
+      preparedUrlInfo: preparedUrlInfo ? { ...preparedUrlInfo, highQualityThumbnail: undefined } : null,
+      preview,
+      startedAt: Date.now(),
+      updatedAt: new Date()
+    };
+    await mongoDb.collection("direct_status_jobs").replaceOne({ _id: account.id }, job, { upsert: true });
     entry.forwardingStatus = {
       ...entry.forwardingStatus,
-      preview: buildStatusPreview("text", statusText, preparedUrlInfo),
-      phase: "sending",
-      message: "Preview generated; starting forwarding"
+      state: "forwarding", phase: "sending", current: 0, total: selectedGroups.length,
+      attempting: 0, skipped: initiallySkipped, startedAt: job.startedAt,
+      etaSeconds: Math.max(0, selectedGroups.length * 3), preview,
+      message: `Status posted. Saved forwarding queue started for ${selectedGroups.length} groups.`
     };
-    let wasStopped = false;
-    const startedAt = Number(entry.forwardingStatus?.startedAt || Date.now());
-    let completedBatchDurationMs = 0;
-    let completedBatchCount = 0;
-    for (let batchStart = 0; batchStart < selectedGroups.length; batchStart += 30) {
-      if (entry.stopForwardingRequested) { wasStopped = true; break; }
-      const batchGroups = selectedGroups.slice(batchStart, batchStart + 30);
-      const batchStartedAt = Date.now();
-      const updateBatchProgress = () => {
-        const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
-        const remainingBatches = Math.ceil((selectedGroups.length - batchStart) / 30);
-        const averageBatchSeconds = completedBatchCount > 0
-          ? Math.max(5, completedBatchDurationMs / completedBatchCount / 1000)
-          : 30;
-        const processedInBatch = Math.min(batchGroups.length, Math.max(0,
-          successCount + failureCount + skippedLocked - initiallySkipped - batchStart));
-        const currentBatchRemaining = processedInBatch > 0
-          ? averageBatchSeconds * (batchGroups.length - processedInBatch) / batchGroups.length
-          : averageBatchSeconds;
-        const remainingSeconds = Math.max(0, currentBatchRemaining + Math.max(0, remainingBatches - 1) * averageBatchSeconds);
-        entry.forwardingStatus = {
-          preview: entry.forwardingStatus?.preview,
-          state: "forwarding", phase: "sending", current: successCount, total: selectedGroups.length,
-          attempting: batchStart + batchGroups.length, skipped: skippedLocked,
-          startedAt, etaSeconds: elapsedSeconds + Math.ceil(remainingSeconds),
-          message: `Forwarded ${successCount}/${selectedGroups.length}; processing batch ${Math.floor(batchStart / 30) + 1}/${Math.ceil(selectedGroups.length / 30)}; skipped ${skippedLocked} locked`
-        };
-      };
-      updateBatchProgress();
-      await Promise.all(batchGroups.map(async (groupId) => {
-        try {
-          await sendTextStatusWithPreview(connection.sock, groupId, statusText, preparedUrlInfo);
-          successCount++;
-          console.log(`Text Status forwarded successfully to selected group ${groupId} (${successCount}/${selectedGroups.length}).`);
-        } catch (error) {
-          if (isLockedGroupError(error)) {
-            skippedLocked++;
-            console.log(`Skipping locked/restricted group ${groupId}: ${error?.message || error}`);
-          } else {
-            failureCount++;
-            console.error(`Text Status forwarding failed for ${groupId}:`, error?.message || error);
-          }
-        }
-        updateBatchProgress();
-      }));
-      completedBatchDurationMs += Date.now() - batchStartedAt;
-      completedBatchCount++;
-    }
-    const state = wasStopped ? "stopped" : successCount === selectedGroups.length ? "forwarded" : successCount > 0 ? "partial" : "failed";
-    entry.forwardingStatus = {
-      preview: entry.forwardingStatus?.preview || buildStatusPreview("text", statusText, preparedUrlInfo),
-      state, current: successCount, total: selectedGroups.length,
-      attempting: selectedGroups.length, skipped: skippedLocked, startedAt: entry.forwardingStatus.startedAt,
-      etaSeconds: 0,
-      message: wasStopped ? `Stopped after forwarding to ${successCount}/${selectedGroups.length} unlocked groups` : `Forwarded ${successCount}/${selectedGroups.length} unlocked groups; skipped ${skippedLocked} locked; ${failureCount} failed`
-    };
+    // Do not hold the HTTP request open for hundreds of destinations. The queue
+    // runs in the background and its MongoDB checkpoint survives Render restarts.
+    setImmediate(() => runDirectStatusJob(account.id).catch(error => console.error("Direct status background queue failed:", error?.message || error)));
     return res.json({
       success: true,
       posted: true,
-      forwarding: { enabled: true, successful: successCount, failed: failureCount, skippedLocked, total: selectedGroups.length, selectedTotal: requestedGroups.length },
-      message: `Your text Status was posted. Forwarded to ${successCount}/${selectedGroups.length} unlocked group statuses; skipped ${skippedLocked} locked${failureCount ? `; ${failureCount} failed` : ""}.`
+      forwarding: { enabled: true, queued: selectedGroups.length, successful: 0, failed: 0, skippedLocked: initiallySkipped, total: selectedGroups.length, selectedTotal: requestedGroups.length },
+      message: `Your text Status was posted. Forwarding has started in the background for ${selectedGroups.length} groups; progress is saved and will resume after a server restart.`
     });
   }
 );
