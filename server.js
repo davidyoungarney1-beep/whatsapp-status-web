@@ -428,7 +428,14 @@ function isOwnStatus(message, sock, accountPhone = '') {
   // the participant is represented by a LID that differs from sock.user.id.
   if (message?.key?.fromMe === true) return true;
   const ownJids = new Set(getOwnJids(sock));
-  const possibleSenders = [message?.key?.participant, message?.participant, message?.key?.senderPn, message?.key?.senderLid, message?.key?.remoteJidAlt, message?.key?.participantAlt].filter(Boolean).map(normalizeJid);
+  const possibleSenders = [
+    message?.key?.participant, message?.participant,
+    message?.key?.senderPn, message?.key?.senderLid,
+    message?.key?.participantPn, message?.key?.participantLid,
+    message?.participantPn, message?.participantLid,
+    message?.key?.remoteJidAlt, message?.key?.participantAlt,
+    message?.key?.sender, message?.senderPn, message?.senderLid
+  ].filter(Boolean).map(normalizeJid);
   for (const sender of possibleSenders) {
     if (ownJids.has(sender)) return true;
     const senderDigits = String(sender.split("@")[0] || "").replace(/\D/g, "");
@@ -485,15 +492,11 @@ function updateAccount(id, changes) {
 }
 
 async function getUnlockedGroups(sock, groupIds) {
-  let metadata = {};
-  try { metadata = await sock.groupFetchAllParticipating(); }
-  catch (error) { console.warn("Could not pre-check group restrictions; runtime checks will be used:", error?.message || error); }
-  const unlocked = [], skipped = [];
-  for (const id of groupIds) {
-    if (metadata?.[id]?.announce === true) skipped.push({ id, reason: "admin-only/locked group" });
-    else unlocked.push(id);
-  }
-  return { unlocked, skipped };
+  // `announce === true` only means ordinary group chat messages are admin-only.
+  // It is NOT proof that group Status posts are forbidden, so do not discard
+  // these destinations before attempting the actual group-status send.
+  // WhatsApp's real send response below is the source of truth for permissions.
+  return { unlocked: [...new Set((groupIds || []).filter(Boolean))], skipped: [] };
 }
 function isLockedGroupError(error) {
   const message = String(error?.message || error || "").toLowerCase();
@@ -689,21 +692,36 @@ async function forwardStatus(
   let mediaBuffer = null;
   if (type === "text") {
     try {
-      preparedUrlInfo = await getUrlInfo(text || "", {
-        thumbnailWidth: 192, fetchOpts: { timeout: 7000 }, logger,
-        uploadImage: sock.waUploadToServer
-      });
+      // Preview generation is optional. A slow website or thumbnail upload must
+      // never hold the forwarding run at "Preparing link preview" indefinitely.
+      preparedUrlInfo = await withTimeout(
+        () => getUrlInfo(text || "", {
+          thumbnailWidth: 192, fetchOpts: { timeout: 5000 }, logger,
+          uploadImage: sock.waUploadToServer
+        }),
+        8000,
+        "Link preview preparation timed out."
+      );
     } catch (error) {
-      console.warn("Link preview preparation failed; forwarding text without cached preview:", error?.message || error);
+      preparedUrlInfo = null;
+      console.warn("Link preview unavailable; continuing with plain text status:", error?.message || error);
     }
   } else if (["image", "video", "audio", "sticker"].includes(type)) {
-    mediaBuffer = await withTimeout(
-      () => downloadMediaMessage(message, "buffer", {}, {
-        logger, reuploadRequest: sock.updateMediaMessage
-      }),
-      90000,
-      "Timed out while downloading the status media."
-    );
+    try {
+      mediaBuffer = await withTimeout(
+        () => downloadMediaMessage(message, "buffer", {}, {
+          logger, reuploadRequest: sock.updateMediaMessage
+        }),
+        90000,
+        "Timed out while downloading the status media."
+      );
+    } catch (error) {
+      if (entry) entry.forwardingStatus = {
+        ...entry.forwardingStatus, state: "failed", phase: "failed", etaSeconds: 0,
+        message: `Could not download your WhatsApp status media: ${error?.message || error}`
+      };
+      throw error;
+    }
   }
 
   const statusPreview = buildStatusPreview(type, text, preparedUrlInfo, mediaBuffer, message);
@@ -2377,6 +2395,25 @@ app.post(
     }
 
     console.log(`Text Status posted for ${account.phone} to ${recipients.length} contacts.`);
+
+    // Generate forwarding metadata separately from publishing. If the preview
+    // service stalls, continue with plain text rather than leaving the job stuck.
+    let preparedUrlInfo = null;
+    if (shouldForward && selectedGroups.length > 0) {
+      try {
+        preparedUrlInfo = await withTimeout(
+          () => getUrlInfo(statusText, {
+            thumbnailWidth: 192, fetchOpts: { timeout: 5000 }, logger,
+            uploadImage: connection.sock.waUploadToServer
+          }),
+          8000,
+          "Link preview preparation timed out."
+        );
+      } catch (previewError) {
+        preparedUrlInfo = null;
+        console.warn("Direct Status preview unavailable; queue will send plain text:", previewError?.message || previewError);
+      }
+    }
 
     if (!shouldForward || selectedGroups.length === 0) {
       const reason = latestAccount.forwardingEnabled === false
