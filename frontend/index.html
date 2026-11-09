@@ -455,6 +455,12 @@ background:#b02a37!important
 
 </style>
 
+
+<style>
+.status-preview{display:none;max-width:100%;border:1px solid #d7e2df;border-radius:11px;overflow:hidden;background:#f7fbf9;color:#173b32;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow-wrap:anywhere}
+.status-preview img{display:block}
+.status-preview .preview-text{white-space:pre-wrap}
+</style>
 </head>
 
 
@@ -944,6 +950,7 @@ Waiting
 </span>
 
 </div>
+<div id="forward-preview-${esc(x.id)}" class="status-preview" style="display:none;margin:8px 0" aria-live="polite"></div>
 <button type="button" class="stop-forwarding-btn" id="stop-forwarding-${esc(x.id)}" onclick="stopForwarding('${x.id}')" title="Stop forwarding" aria-label="Stop forwarding" style="display:none">■</button>
 
 <div class="post-mode-panel">
@@ -955,7 +962,9 @@ Waiting
   <div id="mode-direct-${x.id}" style="display:none">
     <label for="link-url-${x.id}"><b>WhatsApp Status text + link</b></label>
     <textarea id="link-url-${x.id}" rows="4" maxlength="700" placeholder="Write your status text, then include your link too..."></textarea>
-    <button type="button" onclick="postLinkStatus('${x.id}')">Post Text to My Status</button>
+    <button type="button" class="gray" onclick="generateLinkPreview('${x.id}')">Generate Preview</button>
+    <div id="link-preview-${x.id}" class="status-preview" style="display:none" aria-live="polite"></div>
+    <button type="button" id="post-link-btn-${x.id}" onclick="postLinkStatus('${x.id}')" disabled>Post Text to My Status</button>
     <div id="link-result-${x.id}" class="post-result"></div>
     <small>Direct mode supports plain text or links only. Photos and videos are excluded. Add text and a link together. A preview is requested and will appear when WhatsApp supports it. If Forwarding is ON, the bot will forward that status to your selected groups and skip locked groups.</small>
   </div>
@@ -1041,6 +1050,17 @@ accountsBox.innerHTML='<div class="empty"><strong>Could not load accounts.</stro
 
 
 
+function renderStatusPreview(box, preview){
+  if(!box || !preview) return;
+  const thumb=preview.thumbnail ? `<img alt="Link preview image" src="data:image/jpeg;base64,${preview.thumbnail}" style="width:100%;max-height:170px;object-fit:cover;border-radius:9px 9px 0 0">` : "";
+  const title=esc(preview.title || "WhatsApp Status");
+  const description=esc(preview.description || "");
+  const url=esc(preview.url || "");
+  const body=esc(preview.text || "");
+  box.innerHTML=`${thumb}<div style="padding:11px"><div style="font-weight:700;margin-bottom:5px">${title}</div>${description?`<div style="font-size:13px;opacity:.8;margin-bottom:6px">${description}</div>`:""}${url?`<div style="font-size:12px;opacity:.7;overflow-wrap:anywhere">${url}</div>`:""}${body?`<div style="white-space:pre-wrap;margin-top:8px;font-size:13px">${body}</div>`:""}</div>`;
+  box.style.display="block";
+}
+
 function updateForwardingStatus(account){
 
 const box=document.getElementById(
@@ -1062,6 +1082,9 @@ const stopButton=document.getElementById("stop-forwarding-"+account.id);
 
 const status=
 account.forwardingStatus||{};
+const previewBox=document.getElementById("forward-preview-"+account.id);
+if(status.preview) renderStatusPreview(previewBox,status.preview);
+else if(previewBox) previewBox.style.display="none";
 
 
 const state=
@@ -1230,6 +1253,41 @@ function setPostingMode(id, mode){
   manualBtn.classList.toggle("active",mode==="manual");
 }
 
+async function generateLinkPreview(id){
+  const input=document.getElementById("link-url-"+id);
+  const box=document.getElementById("link-preview-"+id);
+  const button=input?.parentElement?.querySelector('button[onclick^="generateLinkPreview"]');
+  const postButton=document.getElementById("post-link-btn-"+id);
+  const text=(input?.value||"").trim();
+  if(!text){ box.textContent="Enter status text or a link first."; box.style.display="block"; return; }
+  if(button){button.disabled=true;button.textContent="Generating…";}
+  if(postButton)postButton.disabled=true;
+  box.textContent="Generating WhatsApp preview…";box.style.display="block";
+  try{
+    const response=await fetch(API+"/api/accounts/"+encodeURIComponent(id)+"/link-preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+    const data=await response.json();
+    if(!response.ok||!data.success)throw Error(data.error||"Preview generation failed.");
+    renderStatusPreview(box,data.preview);
+    box.dataset.previewText=text;
+    if(postButton)postButton.disabled=false;
+  }catch(error){
+    box.textContent=error.message||"Could not generate preview.";
+    box.style.display="block";
+  }finally{
+    if(button){button.disabled=false;button.textContent="Generate Preview";}
+  }
+}
+
+document.addEventListener("input",event=>{
+  if(event.target?.id?.startsWith("link-url-")){
+    const id=event.target.id.slice("link-url-".length);
+    const box=document.getElementById("link-preview-"+id);
+    const postButton=document.getElementById("post-link-btn-"+id);
+    if(box){delete box.dataset.previewText;box.style.display="none";}
+    if(postButton)postButton.disabled=true;
+  }
+});
+
 async function postLinkStatus(id){
   const input=document.getElementById("link-url-"+id);
   const result=document.getElementById("link-result-"+id);
@@ -1239,6 +1297,13 @@ async function postLinkStatus(id){
     result.textContent="Write some text or paste a website link first.";
     result.className="post-result error";
     result.style.display="block";
+    return;
+  }
+  const previewBox=document.getElementById("link-preview-"+id);
+  if(!previewBox || previewBox.dataset.previewText!==value){
+    result.textContent="Generate the preview first. Review it, then tap Post Text to My Status.";
+    result.className="post-result error";result.style.display="block";
+    if(button){button.disabled=true;}
     return;
   }
   if(value.length>700){
