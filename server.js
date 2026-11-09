@@ -563,7 +563,7 @@ function buildStatusPreview(type, text, urlInfo = null, mediaBuffer = null, mess
   let thumbnail = null;
   const jpeg = urlInfo?.jpegThumbnail;
   if (Buffer.isBuffer(jpeg) && jpeg.length) {
-    thumbnail = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+    thumbnail = jpeg.toString("base64");
   } else if (typeof jpeg === "string" && jpeg.length) {
     thumbnail = jpeg.startsWith("data:") ? jpeg : `data:image/jpeg;base64,${jpeg}`;
   } else if (type === "image" && Buffer.isBuffer(mediaBuffer) && mediaBuffer.length <= 1500000) {
@@ -2368,6 +2368,7 @@ app.post(
           : averageBatchSeconds;
         const remainingSeconds = Math.max(0, currentBatchRemaining + Math.max(0, remainingBatches - 1) * averageBatchSeconds);
         entry.forwardingStatus = {
+          preview: entry.forwardingStatus?.preview,
           state: "forwarding", phase: "sending", current: successCount, total: selectedGroups.length,
           attempting: batchStart + batchGroups.length, skipped: skippedLocked,
           startedAt, etaSeconds: elapsedSeconds + Math.ceil(remainingSeconds),
