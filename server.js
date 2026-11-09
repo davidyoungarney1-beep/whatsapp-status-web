@@ -952,15 +952,23 @@ async function getCurrentWhatsAppVersion() {
     throw new Error("The installed WhatsApp library is missing its live-version helper.");
   }
 
-  const result = await versionTools.fetchLatestWaWebVersion();
-  if (result?.isLatest !== true || !Array.isArray(result?.version) || result.version.length !== 3) {
-    throw new Error("Could not retrieve a valid current WhatsApp Web version. Please retry shortly.");
+  let lastVersionError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const result = await versionTools.fetchLatestWaWebVersion();
+      if (result?.isLatest === true && Array.isArray(result?.version) && result.version.length === 3) {
+        cachedWhatsAppVersion = result.version;
+        cachedWhatsAppVersionAt = Date.now();
+        console.log(`ð Using live WhatsApp Web version ${result.version.join(".")}`);
+        return cachedWhatsAppVersion;
+      }
+      lastVersionError = new Error("WhatsApp Web did not return a verified current version.");
+    } catch (error) {
+      lastVersionError = error;
+    }
+    if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1500));
   }
-
-  cachedWhatsAppVersion = result.version;
-  cachedWhatsAppVersionAt = now;
-  console.log(`ð Using live WhatsApp Web version ${result.version.join(".")}`);
-  return cachedWhatsAppVersion;
+  throw new Error(`Could not retrieve a valid current WhatsApp Web version after 3 attempts: ${lastVersionError?.message || "unknown error"}`);
 }
 
 function connectWhatsApp(account, phoneForPairing = null) {
@@ -1615,25 +1623,29 @@ app.post(
           }
         );
 
+      // Observe timeout/socket rejection immediately. The connection setup below
+      // can fail before we await the pairing result; without this handler Node 24
+      // may treat that later rejection as unhandled and restart the service.
+      const pairingOutcome = pairingPromise.then(
+        code => ({ code }),
+        error => ({ error })
+      );
+
       await connectWhatsApp(
         account,
         phone
       );
 
-      let code;
-
-      try {
-        code =
-          await pairingPromise;
-
-      } catch (error) {
-        return res.status(500).json({
+      const pairingResult = await pairingOutcome;
+      if (pairingResult.error) {
+        return res.status(503).json({
           success: false,
           error:
-            error?.message ||
+            pairingResult.error?.message ||
             "Could not generate pairing code"
         });
       }
+      const code = pairingResult.code;
 
       connection =
         connections.get(
